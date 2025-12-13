@@ -1,0 +1,10 @@
+beverage_disposable
+non_disposable_items
+plastic_disposable
+plastic_gloves_disposable
+plastic_utensil_disposable
+snack_disposable
+straw_disposable
+tupperware_reusable
+water_bottle_disposable
+water_bottle_reusable

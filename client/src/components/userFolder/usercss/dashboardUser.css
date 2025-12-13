@@ -1,0 +1,22 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Wrapper for the entire dashboard */
+.dashboard-user {
+  min-height: 100vh; /* Full phone screen */
+  background-image: url('../../../images/background3.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inner container for your content */
+.home-container {
+  flex: 1;          /* Take remaining space */
+  padding: 1rem;
+}
