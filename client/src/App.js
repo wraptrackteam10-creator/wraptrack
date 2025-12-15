@@ -1,3 +1,4 @@
+import LandingPage from "./components/landingpage/LandingPage";
 import Login from "./components/loginpage/Login";
 import Signup from "./components/signuppage/Signup";
 import ForgotPassword from "./components/loginpage/ForgotPassword";
@@ -20,7 +21,7 @@ import GuardHomePage from "./components/guardFolder/pagesGuard/GuardHomePage";
 import GuardItemManagement from "./components/guardFolder/pagesGuard/GuardItemManagement";
 import GuardHistoryLog from "./components/guardFolder/pagesGuard/GuardHistoryLog";
 
-import { SettingsProvider } from "./context/SettingsContext";
+// import { SettingsProvider } from "./context/SettingsContext";
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import "react-datepicker/dist/react-datepicker.css";
@@ -29,9 +30,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/sign-in" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/signup" element={<Signup />} />
+        <Route path="/sign-up" element={<Signup />} />
 
         <Route path="/admin/*" element={<DashboardAdmin />}>
           <Route index element={<Navigate to="home" replace />} />

@@ -166,7 +166,7 @@ function GuardHomePage() {
                     flexGrow: 1,
                     overflowY: "auto",
                 }}
-                className="mx-2"
+                className="mx-2 mb-2"
             >
                 {recent.length === 0 ? (
                     <div className="text-center p-3" style={{ color: "#BBB" }}>

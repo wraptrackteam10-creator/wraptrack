@@ -157,7 +157,7 @@ function GuardNavBar() {
                     style={{ color: "#7a1f1f", cursor: "pointer" }}
                     onClick={() => {
                       localStorage.removeItem("user");
-                      navigate("/");
+                      navigate("/sign-in");
                       setShowMenu(false);
                     }}
                   >

@@ -4,6 +4,8 @@ const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 // do not add this const fetch = require("node-fetch"); // make sure fetch is available
+const jwt = require("jsonwebtoken");
+const { generateAccessToken } = require("../utils/jwt");
 
 const allowedRoles = ["student", "faculty", "visitor", "guard", "admin"];
 
@@ -218,20 +220,55 @@ const cleanupExpiredTempSignups = async () => {
 };
 
 // Login remains the same
+// const login = async (req, res) => {
+//   const { username, password } = req.body;
+//   if (!username || !password) return res.status(400).json({ errorMessage: "All fields required" });
+
+//   try {
+//     const user = await User.findOne({ "userCredentials.username": username });
+//     if (!user) return res.status(401).json({ errorMessage: "Invalid username or password" });
+
+//     const isMatch = await bcrypt.compare(password, user.userCredentials.password);
+//     if (!isMatch) return res.status(401).json({ errorMessage: "Invalid username or password" });
+
+//     res.status(200).json({
+//       message: "Login successful",
+//       type: user.userCredentials.type,
+//       user: {
+//         id: user._id,
+//         firstname: user.firstname,
+//         lastname: user.lastname,
+//         username: user.userCredentials.username,
+//         email: user.userCredentials.email,
+//         role: user.userCredentials.type,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Login error:", error.message);
+//     res.status(500).json({ errorMessage: "Server error, please try again later." });
+//   }
+// };
+
 const login = async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ errorMessage: "All fields required" });
+  if (!username || !password)
+    return res.status(400).json({ errorMessage: "All fields required" });
 
   try {
     const user = await User.findOne({ "userCredentials.username": username });
-    if (!user) return res.status(401).json({ errorMessage: "Invalid username or password" });
+    if (!user)
+      return res.status(401).json({ errorMessage: "Invalid username or password" });
 
     const isMatch = await bcrypt.compare(password, user.userCredentials.password);
-    if (!isMatch) return res.status(401).json({ errorMessage: "Invalid username or password" });
+    if (!isMatch)
+      return res.status(401).json({ errorMessage: "Invalid username or password" });
+
+    // ✅ CREATE JWT
+    const accessToken = generateAccessToken(user);
 
     res.status(200).json({
       message: "Login successful",
-      type: user.userCredentials.type,
+      accessToken,
       user: {
         id: user._id,
         firstname: user.firstname,

@@ -1,4 +1,5 @@
 import logo from "../../images/wtlogo-removebg.png";
+import institutes from "../../data/institutes";
 import { useState, useRef, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
@@ -11,10 +12,13 @@ function Signup() {
   const [lastname, setLastname] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("Student");
+  const [institute, setInstitute] = useState("");
+  const [program, setProgram] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // toggles both password fields
 
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,7 +46,12 @@ function Signup() {
   const lastnameRef = useRef(null);
   const usernameRef = useRef(null);
   const passwordRef = useRef(null);
+  const confirmPasswordRef = useRef(null);
   const emailRef = useRef(null);
+  const instituteRef = useRef(null);
+  const programRef = useRef(null);
+
+  const selectedInstitute = institutes.find(i => i.code === institute);
 
   // -----------------------------
   // Toast helpers
@@ -98,10 +107,10 @@ function Signup() {
     if (/\d/.test(pw)) score++;
     if (/[^A-Za-z0-9]/.test(pw)) score++;
 
-    if (score <= 2) return { label: "Weak", color: "red", width: "20%" };
-    if (score <= 4) return { label: "Medium", color: "orange", width: "50%" };
-    if (score === 5) return { label: "Strong", color: "green", width: "80%" };
-    return { label: "Very Strong", color: "darkgreen", width: "100%" };
+    if (score <= 2) return { label: "Weak", color: "#e74c3c", width: "20%" };
+    if (score <= 4) return { label: "Medium", color: "#f39c12", width: "50%" };
+    if (score === 5) return { label: "Strong", color: "#27ae60", width: "80%" };
+    return { label: "Very Strong", color: "#145A32", width: "100%" };
   };
 
   const passwordStrength = getPasswordStrength(password);
@@ -112,8 +121,20 @@ function Signup() {
     e.preventDefault();
     setSubmitted(true);
 
-    if (!isValidUsername(username) || !isValidEmail(email) || !isValidPassword(password)) {
-      showToastMessage("❌ Invalid input!");
+    // Only enforce student username format for Students; faculty can have any username
+    if ((role === "Student" && !isValidUsername(username))
+      || !isValidEmail(email)
+      || !isValidPassword(password)
+      || !institute
+      || !program) {
+      showToastMessage("❌ Invalid input! Please check required fields.");
+      return;
+    }
+
+    // Confirm password match
+    if (password !== confirmPassword) {
+      showToastMessage("❌ Passwords do not match.");
+      confirmPasswordRef.current?.focus();
       return;
     }
 
@@ -124,7 +145,14 @@ function Signup() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          firstname, lastname, username, password, email, type: role.toLowerCase(),
+          firstname,
+          lastname,
+          username,
+          password,
+          email,
+          type: role.toLowerCase(),
+          institute,
+          program,
         }),
       });
 
@@ -139,7 +167,6 @@ function Signup() {
         } else {
           setIsOtpSent(true);
           setOtpModalVisible(true);
-          // keep storing expiry on client (server still enforces expiry) - but we no longer show a countdown
           const expiry = Date.now() + 10 * 60 * 1000;
           sessionStorage.setItem("pendingOtpEmail", email);
           sessionStorage.setItem("otpExpiry", expiry);
@@ -226,10 +253,20 @@ function Signup() {
         sessionStorage.removeItem("pendingOtpEmail");
         sessionStorage.removeItem("otpExpiry");
 
-        // Reset everything
-        setFirstname(""); setLastname(""); setUsername(""); setPassword(""); setEmail("");
-        setRole("Student"); setOtp(["", "", "", "", "", ""]);
-        setIsOtpSent(false); setSubmitted(false); setIsSubmitting(false);
+        // Reset everything (include new fields)
+        setFirstname("");
+        setLastname("");
+        setUsername("");
+        setPassword("");
+        setConfirmPassword("");
+        setEmail("");
+        setRole("Student");
+        setInstitute("");
+        setProgram("");
+        setOtp(["", "", "", "", "", ""]);
+        setIsOtpSent(false);
+        setSubmitted(false);
+        setIsSubmitting(false);
 
         setTimeout(() => navigate("/"), 2000);
       } else {
@@ -251,7 +288,6 @@ function Signup() {
       });
       const data = await res.json();
       if (res.ok) {
-        // keep storing expiry on client (server still enforces expiry); no client countdown shown
         const expiry = Date.now() + 10 * 60 * 1000;
         sessionStorage.setItem("otpExpiry", expiry);
 
@@ -289,66 +325,198 @@ function Signup() {
   return (
     <div
       ref={scrollContainerRef}
-      className="d-flex justify-content-center align-items-center"
-      style={{ minHeight: "100vh", padding: "20px", backgroundColor: "#f8f9fa", overflowY: "auto" }}
+      className="signup-page"
+      style={{ minHeight: "100vh", padding: "20px", backgroundColor: "#F1EFEC", overflowY: "auto" }}
     >
-      <div className="card shadow-lg border-0 p-4 rounded-3" style={{ width: "100%", maxWidth: "600px" }}>
+      <div className="card signup-card shadow-lg border-0 p-4 rounded-3" style={{ width: "100%", maxWidth: "640px", margin: "0 auto" }}>
         <form onSubmit={handleSubmit}>
           <div className="mb-4 text-center">
             <img src={logo} alt="logo" style={{ width: "100px" }} />
-            <h3 className="fw-bold text-secondary mt-2">WraPTrack</h3>
+            <h3 className="fw-bold app-title mt-2" style={{ color: "#030303" }}>WraPTrack</h3>
           </div>
 
-          <div className="row g-3">
+          <div className="row">
             <div className="col-md-6">
               <div className="mb-3" ref={dropdownRef} style={{ position: "relative" }}>
-                <div className="form-control shadow-sm d-flex justify-content-between align-items-center"
-                     onClick={() => setShowDropdown(!showDropdown)} style={{ cursor: "pointer" }}>
-                  {role} <span style={{ transform: showDropdown ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
+                <div
+                  className="form-control shadow-sm d-flex justify-content-between align-items-center role-select"
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <span style={{ color: "#030303" }}>{role}</span>
+                  <span style={{ transform: showDropdown ? "rotate(180deg)" : "rotate(0deg)", color: "#D4C9BE" }}>▼</span>
                 </div>
                 {showDropdown && (
                   <div className="shadow-sm border rounded position-absolute w-100 bg-white" style={{ zIndex: 10 }}>
-                    {["Student", "Faculty", "Guard"].map(r => (
-                      <div key={r} className="p-2 hover-bg" onClick={() => { setRole(r); setShowDropdown(false); }} style={{ cursor: "pointer" }}>{r}</div>
+                    {["Student", "Faculty"].map(r => (
+                      <div key={r} className="p-2 hover-bg" onClick={() => { setRole(r); setShowDropdown(false); }} style={{ cursor: "pointer", color: "#030303" }}>{r}</div>
                     ))}
                   </div>
                 )}
               </div>
 
-              <input ref={firstnameRef} type="text" placeholder="Firstname" className="form-control mb-3" value={firstname} required
-                     onFocus={() => handleFocus(firstnameRef)} onChange={e => setFirstname(e.target.value)} />
-              <input ref={lastnameRef} type="text" placeholder="Lastname" className="form-control mb-3" value={lastname} required
-                     onFocus={() => handleFocus(lastnameRef)} onChange={e => setLastname(e.target.value)} />
+              <input
+                ref={firstnameRef}
+                type="text"
+                placeholder="Firstname"
+                className="form-control mb-3"
+                value={firstname}
+                required
+                onFocus={() => handleFocus(firstnameRef)}
+                onChange={e => setFirstname(e.target.value)}
+              />
+              <input
+                ref={lastnameRef}
+                type="text"
+                placeholder="Lastname"
+                className="form-control mb-3"
+                value={lastname}
+                required
+                onFocus={() => handleFocus(lastnameRef)}
+                onChange={e => setLastname(e.target.value)}
+              />
+
+              {/* Institute and Program inputs */}
+              <select
+                ref={instituteRef}
+                className="form-control mb-3"
+                value={institute}
+                required
+                onChange={(e) => {
+                  setInstitute(e.target.value);
+                  setProgram(""); // reset program when institute changes
+                }}
+              >
+                <option value="">Select Institute / Faculty</option>
+                {institutes.map(inst => (
+                  <option key={inst.code} value={inst.code}>
+                    {inst.code} — {inst.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                ref={programRef}
+                className="form-control mb-3"
+                value={program}
+                required
+                disabled={!institute}
+                onChange={(e) => setProgram(e.target.value)}
+              >
+                <option value="">
+                  {institute ? "Select Program" : "Select Institute first"}
+                </option>
+
+                {selectedInstitute?.programs.map(prog => (
+                  <option key={prog.code} value={prog.code}>
+                    {prog.code} — {prog.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="col-md-6">
-              <input ref={usernameRef} type="text" placeholder="Student/Faculty ID (0000-0000)" className="form-control mb-3" value={username} required
-                     onFocus={() => handleFocus(usernameRef)} onChange={e => setUsername(e.target.value)} />
-              {submitted && !isValidUsername(username) && <small className="text-danger">*Format must be 0000-0000</small>}
+              <input
+                ref={usernameRef}
+                type="text"
+                placeholder={role === "Student" ? "Student ID (0000-0000)" : "Faculty ID (no strict format)"}
+                className="form-control mb-3"
+                value={username}
+                required
+                onFocus={() => handleFocus(usernameRef)}
+                onChange={e => setUsername(e.target.value)}
+              />
+              {submitted && role === "Student" && !isValidUsername(username) && <small className="text-danger">*Format must be 0000-0000</small>}
 
-              <div className="mb-3" style={{ position: "relative" }}>
-                <input ref={passwordRef} type={showPassword ? "text" : "password"} placeholder="Password" className="form-control"
-                       value={password} required onFocus={() => handleFocus(passwordRef)} onChange={e => setPassword(e.target.value)} autoComplete="new-password" />
-                <i className={`bi ${showPassword ? "bi-eye" : "bi-eye-slash"}`}
-                   onClick={() => setShowPassword(!showPassword)}
-                   style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", cursor: "pointer", fontSize: "1.2rem", color: "#555" }}></i>
+              {/* Password */}
+              <div className="mb-3 position-relative">
+                <input
+                  ref={passwordRef}
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  className="form-control"
+                  value={password}
+                  required
+                  onFocus={() => handleFocus(passwordRef)}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide passwords" : "Show passwords"}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="password-toggle"
+                  title={showPassword ? "Hide passwords" : "Show passwords"}
+                >
+                  <i className={`bi ${showPassword ? "bi-eye" : "bi-eye-slash"}`}></i>
+                </button>
               </div>
-              {password && <div className="mb-3"><div style={{ height: "7px", width: passwordStrength.width, backgroundColor: passwordStrength.color, borderRadius: "5px", transition: ".3s" }}></div>
-                <small style={{ color: passwordStrength.color }}>{passwordStrength.label}</small></div>}
+
+              {/* Confirm Password */}
+              <div className="mb-3 position-relative">
+                <input
+                  ref={confirmPasswordRef}
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Confirm Password"
+                  className="form-control"
+                  value={confirmPassword}
+                  required
+                  onFocus={() => handleFocus(confirmPasswordRef)}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide passwords" : "Show passwords"}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="password-toggle"
+                  title={showPassword ? "Hide passwords" : "Show passwords"}
+                >
+                  <i className={`bi ${showPassword ? "bi-eye" : "bi-eye-slash"}`}></i>
+                </button>
+              </div>
+
+              {password && (
+                <div className="mb-3">
+                  <div className="pw-strength-track">
+                    <div className="pw-strength-bar" style={{ width: passwordStrength.width, backgroundColor: passwordStrength.color }} />
+                  </div>
+                  <small className="pw-strength-label" style={{ color: passwordStrength.color }}>{passwordStrength.label}</small>
+                </div>
+              )}
               {submitted && !isValidPassword(password) && <small className="text-danger mb-2 d-block">*Password must contain 8 characters, uppercase, lowercase, number, and symbol</small>}
 
-              <input ref={emailRef} type="email" placeholder="Email Address" className="form-control mb-3" value={email} required
-                     onFocus={() => handleFocus(emailRef)} onChange={e => setEmail(e.target.value)} />
+              {submitted && password !== confirmPassword && <small className="text-danger mb-2 d-block">*Passwords do not match</small>}
+
+              <input
+                ref={emailRef}
+                type="email"
+                placeholder="Email Address"
+                className="form-control mb-3"
+                value={email}
+                required
+                onFocus={() => handleFocus(emailRef)}
+                onChange={e => setEmail(e.target.value)}
+              />
               {submitted && !isValidEmail(email) && <small className="text-danger">*Enter a valid email</small>}
             </div>
           </div>
 
-          <button type="submit" className="btn btn-primary w-100 mt-3" disabled={isSubmitting || isOtpSent}>
+          <button
+            type="submit"
+            className="btn primary-action w-100 mt-3"
+            disabled={isSubmitting || isOtpSent}
+            style={{ backgroundColor: "#123458", borderColor: "#123458", color: "#F1EFEC" }}
+          >
             {isSubmitting ? "Sending OTP..." : "Submit"}
           </button>
         </form>
 
-        <div className="text-center mt-3"><small>Already have an account? <NavLink to="/" className="text-decoration-none">Login</NavLink></small></div>
+        <div className="text-center mt-3">
+          <small style={{ color: "#030303" }}>
+            Already have an account? <NavLink to="/sign-in" className="text-decoration-none" style={{ color: "#123458" }}>Login</NavLink>
+          </small>
+        </div>
       </div>
 
       {/* OTP Modal */}
@@ -356,19 +524,18 @@ function Signup() {
         <div className="otp-modal-overlay">
           <div className="otp-modal-box">
             <button className="otp-close-btn" onClick={handleCloseOtpModal}>&times;</button>
-            <h5 className="text-center mb-3">Enter OTP</h5>
-            {/* countdown removed - keep a simple note */}
-            <p style={{ fontSize: "0.9rem", color: "#555" }}>An OTP was sent to your email. Enter it below.</p>
+            <h5 className="text-center mb-3" style={{ color: "#030303" }}>Enter OTP</h5>
+            <p style={{ fontSize: "0.9rem", color: "#D4C9BE" }}>An OTP was sent to your email. Enter it below.</p>
             <div className="d-flex justify-content-between mb-3">
               {otp.map((num, index) => (
                 <input key={index} type="text" maxLength={1} className="otp-box"
-                       value={num} onChange={e => handleOtpChange(index, e.target.value)}
-                       onKeyDown={e => handleOtpKeyDown(index, e)} onPaste={handleOtpPaste}
-                       ref={el => otpRefs.current[index] = el} />
+                  value={num} onChange={e => handleOtpChange(index, e.target.value)}
+                  onKeyDown={e => handleOtpKeyDown(index, e)} onPaste={handleOtpPaste}
+                  ref={el => otpRefs.current[index] = el} />
               ))}
             </div>
-            <button className="btn btn-success w-100" onClick={handleVerifyOtp}>Verify OTP</button>
-            <button className="btn btn-outline-primary w-100 mt-2" onClick={handleResendOtp} disabled={resendCooldown > 0}>
+            <button className="btn primary-action w-100" onClick={handleVerifyOtp} style={{ backgroundColor: "#123458", borderColor: "#123458", color: "#F1EFEC" }}>Verify OTP</button>
+            <button className="btn btn-outline-primary w-100 mt-2" onClick={handleResendOtp} disabled={resendCooldown > 0} style={{ borderColor: "#123458", color: "#123458" }}>
               {resendCooldown > 0 ? `Resend OTP (${resendCooldown}s)` : "Resend OTP"}
             </button>
           </div>
@@ -386,7 +553,7 @@ function Signup() {
       {alertVisible && (
         <div className="alert-modal-overlay">
           <div className="alert-modal-box">
-            <p>{alertMessage}</p>
+            <p style={{ color: "#030303" }}>{alertMessage}</p>
             <div className="d-flex justify-content-end gap-2 mt-3">
               <button className="btn btn-secondary" onClick={handleAlertCancel}>Cancel</button>
               <button className="btn btn-danger" onClick={handleAlertConfirm}>Yes</button>
@@ -396,21 +563,91 @@ function Signup() {
       )}
 
       <style>{`
-        .hover-bg:hover { background-color: #f1f1f1; }
+        /* Palette and global rules applied to this page/component */
+        .signup-page { background: #F1EFEC; }
+
+        .signup-card {
+          background: #FFFFFF; /* Cards / tables */
+          border: 1px solid #D4C9BE; /* Card borders */
+        }
+
+        .app-title { color: #030303; } /* Primary text */
+
+        /* Inputs */
+        .form-control {
+          border: 1px solid #D4C9BE;
+          color: #030303;
+          background: #FFFFFF;
+        }
+        .form-control::placeholder { color: #D4C9BE; } /* Muted placeholder text */
+
+        /* Role select appearance */
+        .role-select { background: #FFFFFF; border: 1px solid #D4C9BE; color: #030303; }
+
+        /* Password toggle button */
+        .password-toggle {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: transparent;
+          border: none;
+          color: #555;
+          cursor: pointer;
+        }
+        .password-toggle:focus { outline: none; }
+
+        /* Password strength */
+        .pw-strength-track {
+          height: 7px;
+          width: 100%;
+          background: #F1EFEC;
+          border-radius: 5px;
+          border: 1px solid #E7E2DD;
+        }
+        .pw-strength-bar {
+          height: 100%;
+          border-radius: 5px;
+        }
+        .pw-strength-label { font-weight: 600; }
+
+        /* Primary action (Verify / Submit) - ensure high contrast */
+        .primary-action {
+          background: #123458;
+          border-color: #123458;
+          color: #F1EFEC;
+        }
+
+        /* Outline primary (edit) */
+        .btn-outline-primary {
+          border: 1px solid #123458;
+          color: #123458;
+          background: transparent;
+        }
+
+        /* OTP / alert modal */
         .otp-modal-overlay, .alert-modal-overlay {
-          position: fixed; top:0; left:0;
+          position: fixed; top: 0; left: 0;
           width: 100%; height: 100%;
           background: rgba(0,0,0,0.5);
           display: flex; justify-content: center; align-items: center; z-index: 1050;
         }
         .otp-modal-box, .alert-modal-box {
-          background: #fff; padding: 30px; border-radius: 12px;
-          width: 350px; max-width: 90%; box-shadow: 0 5px 20px rgba(0,0,0,0.3); text-align: center; position: relative;
+          background: #FFFFFF; padding: 30px; border-radius: 12px;
+          width: 380px; max-width: 94%; box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+          text-align: center; position: relative; border: 1px solid #D4C9BE;
         }
         .otp-close-btn {
-          position: absolute; top: 10px; right: 10px; font-size: 1.5rem; border: none; background: transparent; cursor: pointer;
+          position: absolute; top: 10px; right: 10px; font-size: 1.5rem; border: none; background: transparent; cursor: pointer; color: #030303;
         }
-        .otp-box { width: 40px; height: 50px; text-align: center; font-size: 1.5rem; border: 1px solid #ccc; border-radius: 8px; }
+        .otp-box {
+          width: 44px; height: 52px; text-align: center; font-size: 1.3rem;
+          border: 1px solid #D4C9BE; border-radius: 8px; color: #030303; background: #FFFFFF;
+        }
+
+        /* hover and small helpers */
+        .hover-bg:hover { background-color: #F8F7F5; }
+        .text-danger { color: #F08080 !important; } /* Unclaimed / error color */
       `}</style>
     </div>
   );

@@ -349,8 +349,9 @@ function GuardItemManagement() {
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">
                   <tr>
+                    <th style={{ width: 48 }} className="text-center">#</th>
                     <th style={{ width: 80 }} className="text-center">Photo</th>
-                    <th>User</th>
+                    <th>Owner</th>
                     <th>Description</th>
                     <th style={{ width: 140 }}>Date</th>
                     <th style={{ width: 120 }} className="text-center">Status</th>
@@ -359,7 +360,7 @@ function GuardItemManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map((item) => {
+                  {filteredItems.map((item, index) => {
                     const statusColor =
                       item.status === "Deposited" ? "#D4C9BE" :
                       item.status === "Claimed" ? "#90EE90" :
@@ -367,6 +368,8 @@ function GuardItemManagement() {
 
                     return (
                       <tr key={item._id}>
+                        <td className="text-center" style={{ verticalAlign: "middle" }}>{index + 1}</td>
+
                         <td className="text-center">
                           <img
                             src={item.photoUrl || "/logo.png"}
