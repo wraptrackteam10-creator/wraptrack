@@ -5,7 +5,11 @@ from PIL import Image
 import os
 
 app = Flask(__name__)
-CORS(app)
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    supports_credentials=True
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 

@@ -140,7 +140,7 @@ function UserDepositPage() {
 
     try {
       setDescription("⏳ Detecting...");
-      const res = await fetch("http://192.168.1.17:5000/predict", {
+      const res = await fetch("https://python-server-g6od.onrender.com/predict", {
         method: "POST",
         body: formData,
       });
