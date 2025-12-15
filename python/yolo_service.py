@@ -2,14 +2,16 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ultralytics import YOLO
 from PIL import Image
-import io
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-model = YOLO(r"C:\Users\Windows 11Pro\Desktop\WTSystem\python\my_model.pt")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-with open(r"C:\Users\Windows 11Pro\Desktop\WTSystem\python\classes.txt") as f:
+model = YOLO(os.path.join(BASE_DIR, "my_model.pt"))
+
+with open(os.path.join(BASE_DIR, "classes.txt")) as f:
     class_names = [line.strip() for line in f]
 
 @app.route("/predict", methods=["POST"])
@@ -37,6 +39,6 @@ def predict():
 
     return jsonify({ "detections": detections })
 
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

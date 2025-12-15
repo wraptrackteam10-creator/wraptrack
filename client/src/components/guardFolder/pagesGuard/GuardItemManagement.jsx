@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { HiOutlineTrash } from "react-icons/hi";
 import { IoCheckmarkCircleOutline } from "react-icons/io5";
 import { FaRegCalendarAlt, FaFilePdf } from "react-icons/fa";
 import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
-import { MdOutlineKeyboardArrowRight } from "react-icons/md";
+import { CiFilter } from "react-icons/ci";
+import { MdOutlineKeyboardArrowRight, MdClear } from "react-icons/md";
 import { BsSearch } from "react-icons/bs";
 import jsPDF from "jspdf";
 import "bootstrap/dist/css/bootstrap.min.css";
+import FilterPanel from "./FilterPanel";
 
 function GuardItemManagement() {
   const navigate = useNavigate();
@@ -26,6 +28,19 @@ function GuardItemManagement() {
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [loadingItems, setLoadingItems] = useState(true);
+
+  // Advanced filter state
+  const [advancedFilters, setAdvancedFilters] = useState({
+    name: "",
+    descriptions: [],
+    penaltyMode: "any", // any | penalty | no-penalty
+    penaltyMin: "",
+    penaltyMax: "",
+  });
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+
+  // Ref for filter button container to position the floating panel
+  const filterContainerRef = useRef(null);
 
   const guardInfo = JSON.parse(localStorage.getItem("user")) || {};
   const guardId = guardInfo.id;
@@ -147,6 +162,30 @@ function GuardItemManagement() {
     return `${day}/${month}/${year}`;
   };
 
+  // Apply advanced filters coming from FilterPanel
+  const handleApplyAdvancedFilters = (filters) => {
+    setAdvancedFilters(filters);
+  };
+
+  const handleClearAdvancedFilters = () => {
+    setAdvancedFilters({
+      name: "",
+      descriptions: [],
+      penaltyMode: "any",
+      penaltyMin: "",
+      penaltyMax: "",
+    });
+  };
+
+  // Clear all filters (date, status, search, advanced)
+  const handleClearAll = () => {
+    setDateFilter("");
+    setStatusFilter("All");
+    setSearchQuery("");
+    handleClearAdvancedFilters();
+    showToast("Filters cleared", "success");
+  };
+
   // Filters
   const filteredItems = items.filter((item) => {
     const matchesStatus = statusFilter === "All" || item.status === statusFilter;
@@ -156,7 +195,31 @@ function GuardItemManagement() {
       item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.userId?.firstname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.userId?.lastname?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesDate && matchesSearch;
+
+    // advanced filters
+    const { name, descriptions, penaltyMode, penaltyMin, penaltyMax } = advancedFilters;
+
+    const matchesName =
+      !name ||
+      item.userId?.firstname?.toLowerCase().includes(name.toLowerCase()) ||
+      item.userId?.lastname?.toLowerCase().includes(name.toLowerCase());
+
+    const matchesDescriptions =
+      !descriptions || descriptions.length === 0
+        ? true
+        : descriptions.some((d) => (item.description || "").toLowerCase().includes(d.toLowerCase()));
+
+    const pp = Number(item.penaltyPoints || 0);
+
+    let matchesPenaltyMode = true;
+    if (penaltyMode === "penalty") matchesPenaltyMode = pp > 0;
+    else if (penaltyMode === "no-penalty") matchesPenaltyMode = pp === 0;
+
+    let matchesPenaltyRange = true;
+    if (penaltyMin !== "" && !Number.isNaN(Number(penaltyMin))) matchesPenaltyRange = matchesPenaltyRange && pp >= Number(penaltyMin);
+    if (penaltyMax !== "" && !Number.isNaN(Number(penaltyMax))) matchesPenaltyRange = matchesPenaltyRange && pp <= Number(penaltyMax);
+
+    return matchesStatus && matchesDate && matchesSearch && matchesName && matchesDescriptions && matchesPenaltyMode && matchesPenaltyRange;
   });
 
   // Guard access disabled
@@ -171,9 +234,6 @@ function GuardItemManagement() {
     );
   }
 
-  // --- RENDER ---
-  // IMPORTANT: use height: "100%" so the parent (DashboardGuard) controls the page height.
-  // The scrollable areas are the mobile list and the desktop table container (they use overflow:auto)
   return (
     <div className="d-flex flex-column" style={{ height: "100%", backgroundColor: "#F1EFEC", color: "#030303" }}>
       {/* Header / filters (shared) */}
@@ -202,7 +262,6 @@ function GuardItemManagement() {
                   style={{ maxWidth: 150, border: "1px solid #D4C9BE" }}
                   aria-label="Filter by date"
                 />
-                
               </div>
 
               <select
@@ -216,6 +275,41 @@ function GuardItemManagement() {
                   <option key={s}>{s}</option>
                 ))}
               </select>
+
+              <div ref={filterContainerRef} style={{ position: "relative" }}>
+                <button
+                  className="btn d-inline-flex align-items-center justify-content-center"
+                  onClick={() => setFilterPanelOpen((v) => !v)}
+                  aria-expanded={filterPanelOpen}
+                  aria-label="Open advanced filter"
+                  title="Advanced filters"
+                  style={{ border: "1px solid #D4C9BE" }}
+                >
+                  <CiFilter /> Filter
+                </button>
+
+                <FilterPanel
+                  show={filterPanelOpen}
+                  onClose={() => setFilterPanelOpen(false)}
+                  onApply={handleApplyAdvancedFilters}
+                  onClear={() => {
+                    handleClearAdvancedFilters();
+                    showToast("Advanced filters cleared", "success");
+                  }}
+                  initialFilters={advancedFilters}
+                  anchorRef={filterContainerRef}
+                />
+              </div>
+
+              <div>
+                <button 
+                  className="btn d-inline-flex align-items-center justify-content-center" 
+                  onClick={handleClearAll} 
+                  style={{ border: "1px solid #D4C9BE" }}
+                >
+                  Clear
+                </button>
+              </div>
             </div>
 
             <div className="col-12 col-md-5 d-flex gap-2 justify-content-start justify-content-md-end">
