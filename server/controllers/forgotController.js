@@ -1,3 +1,4 @@
+// server/controllers/authController.js (example path)
 const nodemailer = require("nodemailer");
 const User = require("../models/userModel");
 const bcrypt = require("bcryptjs");
@@ -5,25 +6,61 @@ const bcrypt = require("bcryptjs");
 const generateOtp = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
-const sendEmail = async (toEmail, otp) => {
-  const transporter = nodemailer.createTransport({
+const createTransporter = () => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    throw new Error("Missing EMAIL_USER or EMAIL_PASS env variables");
+  }
+  return nodemailer.createTransport({
     service: "Gmail",
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
   });
+};
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: toEmail,
-    subject: "WrapTrack – Password Reset OTP",
-    html: `
-      <p>Your OTP code is:</p>
-      <h2>${otp}</h2>
-      <p>This code expires in <b>10 minutes</b>.</p>
-    `,
-  });
+const sendEmail = async (toEmail, otp) => {
+  const transporter = createTransporter();
+
+  // optional: verify transporter before sending, helps surface auth problems
+  try {
+    await transporter.verify();
+  } catch (err) {
+    console.error("Email transporter verify failed:", err);
+    throw new Error("Email transporter verification failed");
+  }
+
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: toEmail,
+      subject: "WrapTrack – Password Reset OTP",
+      html: `
+        <p>Your OTP code is:</p>
+        <h2>${otp}</h2>
+        <p>This code expires in <b>10 minutes</b>.</p>
+      `,
+    });
+  } catch (err) {
+    console.error("sendMail failed:", err);
+    throw new Error("Failed to send email");
+  }
+};
+
+// safer mask function
+const maskEmailLocalPart = (email) => {
+  if (!email || typeof email !== "string") return null;
+  const parts = email.split("@");
+  if (parts.length !== 2) return "****@****";
+  const [local, domain] = parts;
+  if (!local) return `****@${domain}`;
+  // if local part is very short, keep first char and mask the rest
+  if (local.length <= 2) {
+    return `${local[0]}${"*".repeat(Math.max(0, local.length - 1))}@${domain}`;
+  }
+  // show first 2 and last char, mask middle (safe repeat)
+  const middleCount = Math.max(0, local.length - 3);
+  return `${local.slice(0, 2)}${"*".repeat(middleCount)}${local.slice(-1)}@${domain}`;
 };
 
 const requestOtp = async (req, res) => {
@@ -36,6 +73,12 @@ const requestOtp = async (req, res) => {
     if (!user)
       return res.status(404).json({ errorMessage: "User not found" });
 
+    const email = user?.userCredentials?.email;
+    if (!email) {
+      console.error("User has no email set for username:", username);
+      return res.status(500).json({ errorMessage: "No email on account" });
+    }
+
     const otp = generateOtp();
     const hashedOtp = await bcrypt.hash(otp, 10);
 
@@ -43,17 +86,26 @@ const requestOtp = async (req, res) => {
     user.userCredentials.otpExpiresAt = new Date(Date.now() + 10 * 60000);
     user.userCredentials.otpUsed = false;
 
+    // save OTP before attempting to send email
     await user.save();
 
-    const email = user.userCredentials.email;
-    const [name, domain] = email.split("@");
-    const emailMasked = `${name.slice(0,2)}${"*".repeat(name.length - 3)}${name.slice(-1)}@${domain}`;
+    const emailMasked = maskEmailLocalPart(email);
 
-    await sendEmail(email, otp);
+    // send email and handle any errors
+    try {
+      await sendEmail(email, otp);
+    } catch (emailErr) {
+      console.error("Error sending OTP email to", email, emailErr);
+      // Optional: you might want to clear the OTP if sending failed:
+      // user.userCredentials.otpCode = null;
+      // user.userCredentials.otpExpiresAt = null;
+      // await user.save();
+      return res.status(502).json({ errorMessage: "Failed to send OTP email" });
+    }
 
     res.status(200).json({ message: "OTP sent", emailMasked });
   } catch (err) {
-    console.error(err);
+    console.error("requestOtp error:", err);
     res.status(500).json({ errorMessage: "Server error" });
   }
 };
