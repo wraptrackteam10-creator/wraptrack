@@ -79,6 +79,7 @@ cron.schedule("* * * * *", async () => {
 
 /* ----------------------------------------- */
 
+console.log("EMAIL_PASS length:", process.env.EMAIL_PASS?.length);
 app.listen(PORT, () => {
   console.log(`🚀 Server running at PORT: ${PORT}`);
 });

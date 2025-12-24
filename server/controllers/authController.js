@@ -18,19 +18,19 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Verify email via Abstract API
-const verifyEmailWithAbstract = async (email) => {
-  try {
-    const response = await fetch(
-      `https://emailreputation.abstractapi.com/v1/?api_key=${process.env.ABSTRACT_API_KEY}&email=${email}`
-    );
-    const data = await response.json();
-    return data.email_deliverability?.status === "deliverable";
-  } catch (error) {
-    console.error("Abstract API error:", error.message);
-    return false;
-  }
-};
+// // Verify email via Abstract API
+// const verifyEmailWithAbstract = async (email) => {
+//   try {
+//     const response = await fetch(
+//       `https://emailreputation.abstractapi.com/v1/?api_key=${process.env.ABSTRACT_API_KEY}&email=${email}`
+//     );
+//     const data = await response.json();
+//     return data.email_deliverability?.status === "deliverable";
+//   } catch (error) {
+//     console.error("Abstract API error:", error.message);
+//     return false;
+//   }
+// };
 
 // Step 1: Signup → save in TempSignup with OTP
 const signup = async (req, res) => {
@@ -43,8 +43,8 @@ const signup = async (req, res) => {
   if (!emailRegex.test(email)) return res.status(400).json({ errorMessage: "Invalid email format!" });
 
   try {
-    const isEmailValid = await verifyEmailWithAbstract(email);
-    if (!isEmailValid) return res.status(400).json({ errorMessage: "Email is invalid or undeliverable!" });
+    // const isEmailValid = await verifyEmailWithAbstract(email);
+    // if (!isEmailValid) return res.status(400).json({ errorMessage: "Email is invalid or undeliverable!" });
 
     // Check existing users
     if (await User.findOne({ "userCredentials.username": username })) return res.status(400).json({ errorMessage: "Username already taken!" });
