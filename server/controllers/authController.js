@@ -1,36 +1,40 @@
 const User = require("../models/userModel");
 const TempSignup = require("../models/tempSignupModel");
 const bcrypt = require("bcryptjs");
-const nodemailer = require("nodemailer");
+// const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 // do not add this const fetch = require("node-fetch"); // make sure fetch is available
 const jwt = require("jsonwebtoken");
 const { generateAccessToken } = require("../utils/jwt");
+const { Resend } = require("resend");
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 
 const allowedRoles = ["student", "faculty", "visitor", "guard", "admin"];
 
-// Nodemailer transporter
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// // Nodemailer transporter
+// const transporter = nodemailer.createTransport({
+//   service: "gmail",
+//   auth: {
+//     user: process.env.EMAIL_USER,
+//     pass: process.env.EMAIL_PASS,
+//   },
+// });
 
-// // Verify email via Abstract API
-// const verifyEmailWithAbstract = async (email) => {
-//   try {
-//     const response = await fetch(
-//       `https://emailreputation.abstractapi.com/v1/?api_key=${process.env.ABSTRACT_API_KEY}&email=${email}`
-//     );
-//     const data = await response.json();
-//     return data.email_deliverability?.status === "deliverable";
-//   } catch (error) {
-//     console.error("Abstract API error:", error.message);
-//     return false;
-//   }
-// };
+// Verify email via Abstract API
+const verifyEmailWithAbstract = async (email) => {
+  try {
+    const response = await fetch(
+      `https://emailreputation.abstractapi.com/v1/?api_key=${process.env.ABSTRACT_API_KEY}&email=${email}`
+    );
+    const data = await response.json();
+    return data.email_deliverability?.status === "deliverable";
+  } catch (error) {
+    console.error("Abstract API error:", error.message);
+    return false;
+  }
+};
 
 // Step 1: Signup → save in TempSignup with OTP
 const signup = async (req, res) => {
@@ -43,8 +47,8 @@ const signup = async (req, res) => {
   if (!emailRegex.test(email)) return res.status(400).json({ errorMessage: "Invalid email format!" });
 
   try {
-    // const isEmailValid = await verifyEmailWithAbstract(email);
-    // if (!isEmailValid) return res.status(400).json({ errorMessage: "Email is invalid or undeliverable!" });
+    const isEmailValid = await verifyEmailWithAbstract(email);
+    if (!isEmailValid) return res.status(400).json({ errorMessage: "Email is invalid or undeliverable!" });
 
     // Check existing users
     if (await User.findOne({ "userCredentials.username": username })) return res.status(400).json({ errorMessage: "Username already taken!" });
