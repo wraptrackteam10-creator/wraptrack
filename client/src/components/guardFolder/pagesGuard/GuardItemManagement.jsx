@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { HiOutlineTrash } from "react-icons/hi";
+import { LuArchiveX } from "react-icons/lu";
 import { IoCheckmarkCircleOutline } from "react-icons/io5";
 import { FaRegCalendarAlt, FaFilePdf } from "react-icons/fa";
 import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
@@ -115,12 +115,25 @@ function GuardItemManagement() {
           prev.map((it) => (it._id === confirmTarget._id ? { ...it, status: "Claimed", claimedAt: new Date().toISOString() } : it))
         );
         showToast("Item verified", "success");
-      } else if (confirmMode === "delete" && confirmTarget) {
-        const res = await fetch(`${API_BASE_URL}/api/items/${confirmTarget._id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error("Delete failed");
+      } else if (confirmMode === "archive" && confirmTarget) {
+        const res = await fetch(
+          `${API_BASE_URL}/api/items/${confirmTarget._id}/action`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "Archive" }),
+          }
+        );
 
-        setItems((prev) => prev.filter((it) => it._id !== confirmTarget._id));
-        showToast("Item deleted", "success");
+        if (!res.ok) throw new Error("Archive failed");
+
+        setItems((prev) =>
+          prev.map((it) =>
+            it._id === confirmTarget._id ? { ...it, action: "Archive" } : it
+          )
+        );
+
+        showToast("Item archived", "success");
       } else if (confirmMode === "download") {
         downloadPDF();
       }
@@ -141,7 +154,7 @@ function GuardItemManagement() {
       doc.setFontSize(12);
       doc.text(`${index + 1}. ${item.userId?.firstname || ""} ${item.userId?.lastname || ""}`, 10, y);
       doc.setFontSize(10);
-      doc.text(`Status: ${item.status} - Penalty: ${item.penaltyPoints || 0}P`, 10, y + 6);
+      doc.text(`Status: ${item.status} - Penalty: ${item.penalty || 0}P`, 10, y + 6);
       const descLines = doc.splitTextToSize(`Description: ${item.description || "-"}`, 180);
       doc.text(descLines, 10, y + 12);
       y += 12 + descLines.length * 5;
@@ -209,7 +222,7 @@ function GuardItemManagement() {
         ? true
         : descriptions.some((d) => (item.description || "").toLowerCase().includes(d.toLowerCase()));
 
-    const pp = Number(item.penaltyPoints || 0);
+    const pp = Number(item.penalty || 0);
 
     let matchesPenaltyMode = true;
     if (penaltyMode === "penalty") matchesPenaltyMode = pp > 0;
@@ -278,14 +291,14 @@ function GuardItemManagement() {
 
               <div ref={filterContainerRef} style={{ position: "relative" }}>
                 <button
-                  className="btn d-inline-flex align-items-center justify-content-center"
+                  className="form-control btn d-inline-flex align-items-center justify-content-center"
                   onClick={() => setFilterPanelOpen((v) => !v)}
                   aria-expanded={filterPanelOpen}
                   aria-label="Open advanced filter"
                   title="Advanced filters"
                   style={{ border: "1px solid #D4C9BE" }}
                 >
-                  <CiFilter /> Filter
+                  <CiFilter /> Filters
                 </button>
 
                 <FilterPanel
@@ -303,7 +316,7 @@ function GuardItemManagement() {
 
               <div>
                 <button 
-                  className="btn d-inline-flex align-items-center justify-content-center" 
+                  className="form-control btn d-inline-flex align-items-center justify-content-center" 
                   onClick={handleClearAll} 
                   style={{ border: "1px solid #D4C9BE" }}
                 >
@@ -328,7 +341,7 @@ function GuardItemManagement() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Search items"
+                  placeholder="Search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   aria-label="Search items"
@@ -385,13 +398,15 @@ function GuardItemManagement() {
                       <div className="d-flex justify-content-between align-items-center w-100">
                         <div className="d-flex align-items-center gap-2">
                           <h6 className="mb-0">{item.userId?.firstname} {item.userId?.lastname}</h6>
-                          <small style={{ color: item.penaltyPoints > 0 ? "red" : "#D4C9BE", fontWeight: item.penaltyPoints > 0 ? "bold" : "normal" }}>
-                            {item.penaltyPoints || 0}P
-                          </small>
                         </div>
-                        <button className="btn btn-sm d-flex align-items-center justify-content-center" style={{ color: "#123458" }} onClick={() => setExpandedId(isExpanded ? null : item._id)}>
-                          {isExpanded ? <IoIosArrowDown size={20} /> : <MdOutlineKeyboardArrowRight size={20} />}
-                        </button>
+                        <div className="d-flex align-items-center" style={{gap: "3px"}}> 
+                          <small style={{ color: item.penalty > 0 ? "red" : "#D4C9BE", fontWeight: item.penalty > 0 ? "bold" : "normal", backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none" }}>
+                            {item.penalty || 0}P
+                          </small>
+                          <button className="btn btn-sm d-flex align-items-center justify-content-center" style={{ color: "#123458" }} onClick={() => setExpandedId(isExpanded ? null : item._id)}>
+                            {isExpanded ? <IoIosArrowDown size={20} /> : <MdOutlineKeyboardArrowRight size={20} />}
+                          </button>
+                        </div>
                       </div>
 
                       <div className="d-flex justify-content-between align-items-center mt-2">
@@ -409,8 +424,8 @@ function GuardItemManagement() {
                             <IoCheckmarkCircleOutline /> Verify
                           </button>
 
-                          <button className="btn btn-sm btn-outline-danger" onClick={() => openConfirm(item, "delete")} style={{ border: "1px solid #D4C9BE" }}>
-                            <HiOutlineTrash />
+                          <button className="btn btn-sm btn-outline-danger" onClick={() => openConfirm(item, "archive")} style={{ border: "1px solid #D4C9BE" }}>
+                            <LuArchiveX />
                           </button>
                         </div>
                       </div>
@@ -489,8 +504,8 @@ function GuardItemManagement() {
                         </td>
 
                         <td className="text-center">
-                          <small style={{ color: item.penaltyPoints > 0 ? "red" : "#6c757d", fontWeight: item.penaltyPoints > 0 ? 700 : 400 }}>
-                            {item.penaltyPoints || 0}P
+                          <small style={{ color: item.penalty > 0 ? "red" : "#6c757d", fontWeight: item.penalty > 0 ? 700 : 400,backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none"   }}>
+                            {item.penalty || 0}P
                           </small>
                         </td>
 
@@ -508,11 +523,11 @@ function GuardItemManagement() {
 
                             <button
                               className="btn btn-sm btn-outline-danger"
-                              onClick={() => openConfirm(item, "delete")}
+                              onClick={() => openConfirm(item, "archive")}
                               style={{ border: "1px solid #D4C9BE", minWidth: 56 }}
-                              title="Delete"
+                              title="Archive item"
                             >
-                              <HiOutlineTrash />
+                              <LuArchiveX />
                             </button>
                           </div>
                         </td>
@@ -548,7 +563,7 @@ function GuardItemManagement() {
               <div className="modal-content" style={{ border: "1px solid #D4C9BE" }}>
                 <div className="modal-header">
                   <h6 className="modal-title">
-                    {confirmMode === "verify" ? "Confirm Verification" : confirmMode === "delete" ? "Confirm Delete" : "Confirm Download"}
+                    {confirmMode === "verify" ? "Confirm Verification" : confirmMode === "archive" ? "Confirm Archive" : "Confirm Download"}
                   </h6>
                   <button className="btn-close" onClick={closeConfirm} />
                 </div>
@@ -557,8 +572,8 @@ function GuardItemManagement() {
                   <p>
                     {confirmMode === "verify"
                       ? "Are you sure you want to verify this item?"
-                      : confirmMode === "delete"
-                      ? "Are you sure you want to delete this item?"
+                      : confirmMode === "archive"
+                      ? "Are you sure you want to archive this item?"
                       : "Do you want to download the PDF report?"}
                   </p>
                 </div>

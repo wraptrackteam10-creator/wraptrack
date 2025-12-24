@@ -139,9 +139,9 @@ function UserHistoryLog() {
                     {/* ✅ Show photo from log document */}
                     {selectedLog === log._id && (
                       <div className="mt-3 text-center">
-                        {log.photo?.data ? (
+                        {log.photoUrl ? (
                           <img
-                            src={`${API_BASE_URL}/api/logs/${log._id}/photo`}
+                            src={log.photoUrl || "/logo.png"}
                             alt="Item"
                             className="rounded"
                             style={{

@@ -34,9 +34,9 @@ const verifyEmailWithAbstract = async (email) => {
 
 // Step 1: Signup → save in TempSignup with OTP
 const signup = async (req, res) => {
-  const { firstname, lastname, username, password, email, type } = req.body;
+  const { firstname, lastname, username, password, email, type, institute, program } = req.body;
 
-  if (!firstname || !lastname || !username || !password || !email)
+  if (!firstname || !lastname || !username || !password || !email || !institute || !program)
     return res.status(400).json({ errorMessage: "All fields are required!" });
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -65,9 +65,13 @@ const signup = async (req, res) => {
         otpExpiresAt = tempUser.otpExpiresAt;
 
         // Update tempUser with any changed fields
+        tempUser.institute = institute;
+        tempUser.program = program;
         tempUser.firstname = firstname;
+        tempUser.username = username;
         tempUser.lastname = lastname;
         tempUser.password = hashedPassword;
+        tempUser.email = email;
         tempUser.type = type?.toLowerCase() || "student";
         await tempUser.save();
 
@@ -77,9 +81,13 @@ const signup = async (req, res) => {
         otp = crypto.randomInt(100000, 999999).toString();
         otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+        tempUser.institute = institute;
+        tempUser.program = program;
         tempUser.firstname = firstname;
+        tempUser.username = username;
         tempUser.lastname = lastname;
         tempUser.password = hashedPassword;
+        tempUser.email = email;
         tempUser.type = type?.toLowerCase() || "student";
         tempUser.otp = otp;
         tempUser.otpExpiresAt = otpExpiresAt;
@@ -91,6 +99,8 @@ const signup = async (req, res) => {
       otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
       tempUser = new TempSignup({
+        institute,
+        program,
         firstname,
         lastname,
         username,
@@ -159,6 +169,8 @@ const verifyOtp = async (req, res) => {
       firstname: tempUser.firstname,
       lastname: tempUser.lastname,
       userCredentials: {
+        institute: tempUser.institute,   // ✅ ADD THIS
+        program: tempUser.program,   
         username: tempUser.username,
         password: tempUser.password,
         type: tempUser.type,

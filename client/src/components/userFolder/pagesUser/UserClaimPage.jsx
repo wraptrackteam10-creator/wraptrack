@@ -152,13 +152,13 @@ function UserClaimPage() {
                       cursor: item.photo?.data ? "pointer" : "default",
                     }}
                     onClick={() =>
-                      item.photo?.data &&
-                      setSelectedImage(`${API_BASE_URL}/api/items/${item._id}/photo`)
+                      item.photoUrl &&
+                      setSelectedImage(item.photoUrl || "/logo.png")
                     }
                   >
-                    {item.photo?.data ? (
+                    {item.photoUrl ? (
                       <img
-                        src={`${API_BASE_URL}/api/items/${item._id}/photo`}
+                        src={item.photoUrl || "/logo.png"}
                         alt="Item"
                         style={{
                           width: "100%",

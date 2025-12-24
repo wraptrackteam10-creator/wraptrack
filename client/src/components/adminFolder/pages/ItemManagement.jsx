@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { TiArrowUnsorted } from "react-icons/ti";
 import { FaSortUp } from "react-icons/fa6";
 import { FaSortDown } from "react-icons/fa6";
+import { CiFilter } from "react-icons/ci";
 import "bootstrap/dist/css/bootstrap.min.css";
+import ItemFilterPanel from "./ItemFilterPanel";
 
 function ItemManagement() {
   const [items, setItems] = useState([]);
@@ -19,6 +21,20 @@ function ItemManagement() {
 
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [verifyItemId, setVerifyItemId] = useState(null);
+
+  // advanced filter state + panel visibility
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState({
+    name: "",
+    descriptions: [],
+    penaltyMode: "any",
+    penaltyMin: "",
+    penaltyMax: "",
+    dateFrom: "",
+    dateTo: "",
+  });
+
+  const filterButtonRef = useRef(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
 
@@ -47,10 +63,63 @@ function ItemManagement() {
   /* ---------- SORT / FILTER ---------- */
   let filteredItems = items.filter((i) => {
     const matchSearch =
+      !search ||
       i.description?.toLowerCase().includes(search.toLowerCase()) ||
       `${i.firstname} ${i.lastname}`.toLowerCase().includes(search.toLowerCase());
+
     const matchStatus = statusFilter === "All" || i.status === statusFilter;
+
     return matchSearch && matchStatus;
+  });
+
+  // Apply advanced filters
+  const {
+    name,
+    descriptions,
+    penaltyMode,
+    penaltyMin,
+    penaltyMax,
+    dateFrom,
+    dateTo,
+  } = advancedFilters;
+
+  filteredItems = filteredItems.filter((i) => {
+    // name (owner)
+    if (name) {
+      const owner = `${i.firstname || ""} ${i.lastname || ""}`.toLowerCase();
+      if (!owner.includes(name.toLowerCase())) return false;
+    }
+
+    // descriptions (any match)
+    if (descriptions && descriptions.length > 0) {
+      const desc = (i.description || "").toLowerCase();
+      const anyMatch = descriptions.some((d) => desc.includes(d.toLowerCase()));
+      if (!anyMatch) return false;
+    }
+
+    // penalty mode
+    const pp = Number(i.penalty || 0);
+    if (penaltyMode === "penalty" && pp <= 0) return false;
+    if (penaltyMode === "no-penalty" && pp !== 0) return false;
+
+    // penalty range
+    if (penaltyMin !== "" && !Number.isNaN(Number(penaltyMin))) {
+      if (pp < Number(penaltyMin)) return false;
+    }
+    if (penaltyMax !== "" && !Number.isNaN(Number(penaltyMax))) {
+      if (pp > Number(penaltyMax)) return false;
+    }
+
+    // date range (compare YYYY-MM-DD)
+    const itemDate = i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : "";
+    if (dateFrom && itemDate) {
+      if (itemDate < dateFrom) return false;
+    }
+    if (dateTo && itemDate) {
+      if (itemDate > dateTo) return false;
+    }
+
+    return true;
   });
 
   // Custom status order for sorting
@@ -174,6 +243,54 @@ function ItemManagement() {
     }
   };
 
+  /* ---------- Advanced filter handlers ---------- */
+  const handleApplyAdvancedFilters = (filters) => {
+    setAdvancedFilters({
+      name: filters.name || "",
+      descriptions: filters.descriptions || [],
+      penaltyMode: filters.penaltyMode || "any",
+      penaltyMin: filters.penaltyMin ?? "",
+      penaltyMax: filters.penaltyMax ?? "",
+      dateFrom: filters.dateFrom || "",
+      dateTo: filters.dateTo || "",
+    });
+    showToast("Advanced filters applied", "success");
+  };
+
+  const handleClearAdvancedFilters = () => {
+    setAdvancedFilters({
+      name: "",
+      descriptions: [],
+      penaltyMode: "any",
+      penaltyMin: "",
+      penaltyMax: "",
+      dateFrom: "",
+      dateTo: "",
+    });
+    showToast("Advanced filters cleared", "success");
+  };
+
+  const handleClearAll = () => {
+    setSearch("");
+    setStatusFilter("All");
+    handleClearAdvancedFilters();
+    setFilterPanelOpen(false);
+    showToast("Filters cleared", "success");
+  };
+
+  const activeFilterCount = (() => {
+    let c = 0;
+    if (advancedFilters.name) c++;
+    if (advancedFilters.descriptions?.length) c += advancedFilters.descriptions.length;
+    if (advancedFilters.penaltyMode && advancedFilters.penaltyMode !== "any") c++;
+    if (advancedFilters.penaltyMin !== "") c++;
+    if (advancedFilters.penaltyMax !== "") c++;
+    if (advancedFilters.dateFrom) c++;
+    if (advancedFilters.dateTo) c++;
+    
+    return c;
+  })();
+
   return (
     <div
       className="d-flex container-fluid p-2"
@@ -196,13 +313,56 @@ function ItemManagement() {
           </small>
         </div>
 
-        <input
-          className="form-control mt-2"
-          placeholder="Search item"
-          style={{ maxWidth: 240, border: "1px solid #D4C9BE", height: "37px" }}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="d-flex gap-2 align-items-center">
+          <select
+            className="form-select"
+            style={{ maxWidth: 150, height: "37px", border: "1px solid #D4C9BE" }}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            aria-label="Filter by status"
+          >
+            <option>All</option>
+            <option>Deposited</option>
+            <option>Claimed</option>
+            <option>Unclaimed</option>
+          </select>
+
+          <div ref={filterButtonRef}>
+            <button
+              className="btn d-inline-flex align-items-center"
+              onClick={() => setFilterPanelOpen((v) => !v)}
+              title="Advanced filters"
+              style={{
+                border: filterPanelOpen ? "2px solid #123458" : "1px solid #D4C9BE",
+                background: activeFilterCount > 0 ? "#123458" : "#fff",
+                color: activeFilterCount > 0 ? "#F1EFEC" : "#123458",
+                height: "37px",
+                padding: "0 10px",
+                whiteSpace: "nowrap",
+              }}
+              aria-expanded={filterPanelOpen}
+            >
+              <CiFilter style={{ marginRight: 8 }} /> Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </button>
+          </div>
+
+          <button
+            className="btn border"
+            style={{ height: "37px" }}
+            onClick={handleClearAll}
+            title="Clear filters"
+          >
+            Clear
+          </button>
+
+          <input
+            className="form-control"
+            placeholder="Search item"
+            style={{ maxWidth: 240, border: "1px solid #D4C9BE", height: "37px" }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* TABLE CARD */}
@@ -412,7 +572,7 @@ function ItemManagement() {
                               setShowDeleteModal(true);
                             }}
                           >
-                            Delete
+                            Archive
                           </button>
                         </>
                       )}
@@ -432,6 +592,19 @@ function ItemManagement() {
           {timeAgo(getLastUpdated())}
         </div>
       </div>
+
+      {/* Advanced filter panel */}
+      <ItemFilterPanel
+        show={filterPanelOpen}
+        onClose={() => setFilterPanelOpen(false)}
+        onApply={handleApplyAdvancedFilters}
+        onClear={() => {
+          handleClearAdvancedFilters();
+          setFilterPanelOpen(false);
+        }}
+        initialFilters={advancedFilters}
+        anchorRef={filterButtonRef}
+      />
 
       {/* TOAST */}
       {toast.show && (

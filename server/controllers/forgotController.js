@@ -11,7 +11,7 @@ const createTransporter = () => {
     throw new Error("Missing EMAIL_USER or EMAIL_PASS env variables");
   }
   return nodemailer.createTransport({
-    service: "Gmail",
+    service: "gmail",
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,

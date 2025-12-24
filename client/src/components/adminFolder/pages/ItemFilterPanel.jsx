@@ -1,13 +1,23 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export default function FilterPanel({
+/**
+ * Floating Item advanced filter panel.
+ * Props:
+ *  - show: boolean
+ *  - onClose: () => void
+ *  - onApply: (filters) => void
+ *  - onClear: () => void
+ *  - initialFilters: { name, descriptions, penaltyMode, penaltyMin, penaltyMax, dateFrom, dateTo }
+ *  - anchorRef: ref of element to anchor the panel to (optional)
+ */
+export default function ItemFilterPanel({
   show,
   onClose,
   onApply,
   onClear,
   initialFilters = {},
-  anchorRef, // element ref where the button lives
+  anchorRef,
 }) {
   const descriptionOptions = [
     "Disposable Water Bottle",
@@ -27,6 +37,8 @@ export default function FilterPanel({
   const [penaltyMode, setPenaltyMode] = useState(initialFilters.penaltyMode || "any");
   const [penaltyMin, setPenaltyMin] = useState(initialFilters.penaltyMin ?? "");
   const [penaltyMax, setPenaltyMax] = useState(initialFilters.penaltyMax ?? "");
+  const [dateFrom, setDateFrom] = useState(initialFilters.dateFrom || "");
+  const [dateTo, setDateTo] = useState(initialFilters.dateTo || "");
 
   const panelRef = useRef(null);
   const [position, setPosition] = useState({ left: 0, top: 0, transformOrigin: "top left" });
@@ -39,15 +51,16 @@ export default function FilterPanel({
     setPenaltyMode(initialFilters.penaltyMode || "any");
     setPenaltyMin(initialFilters.penaltyMin ?? "");
     setPenaltyMax(initialFilters.penaltyMax ?? "");
+    setDateFrom(initialFilters.dateFrom || "");
+    setDateTo(initialFilters.dateTo || "");
   }, [initialFilters]);
 
-  // compute position when shown, on resize, scroll
+  // position logic similar to other FilterPanel (anchors to anchorRef if provided)
   useEffect(() => {
     if (!show) return;
     const computePosition = () => {
       const anchor = anchorRef?.current;
       if (!anchor) {
-        // fallback: center near top-left
         setPosition({ left: VIEWPORT_PADDING, top: VIEWPORT_PADDING + 42, transformOrigin: "top left" });
         return;
       }
@@ -55,29 +68,23 @@ export default function FilterPanel({
       const rect = anchor.getBoundingClientRect();
       const scrollX = window.scrollX || window.pageXOffset;
       const scrollY = window.scrollY || window.pageYOffset;
-      // desired left relative to document
       let left = rect.left + scrollX;
-      // default top below anchor
       let top = rect.bottom + scrollY + 8;
 
-      // ensure left stays within viewport
+      // ensure left within viewport
       if (left + PANEL_WIDTH + VIEWPORT_PADDING > scrollX + window.innerWidth) {
-        // shift to the left so it fits
         left = Math.max(VIEWPORT_PADDING + scrollX, scrollX + window.innerWidth - PANEL_WIDTH - VIEWPORT_PADDING);
       }
       left = Math.max(left, VIEWPORT_PADDING + scrollX);
 
-      // If the panel would go off bottom of viewport, try placing it above anchor
-      const panelHeight = panelRef.current ? panelRef.current.offsetHeight : 220; // fallback estimate
+      const panelHeight = panelRef.current ? panelRef.current.offsetHeight : 260;
       const viewportBottom = scrollY + window.innerHeight - VIEWPORT_PADDING;
       if (top + panelHeight > viewportBottom) {
-        // place above anchor
         const aboveTop = rect.top + scrollY - panelHeight - 8;
         if (aboveTop >= scrollY + VIEWPORT_PADDING) {
           top = aboveTop;
           setPosition((p) => ({ ...p, transformOrigin: "bottom left" }));
         } else {
-          // not enough space above either -> clamp top so it fits
           top = Math.max(scrollY + VIEWPORT_PADDING, viewportBottom - panelHeight);
           setPosition((p) => ({ ...p, transformOrigin: "top left" }));
         }
@@ -88,7 +95,6 @@ export default function FilterPanel({
       setPosition({ left, top, transformOrigin: (panelRef.current && top < rect.top + scrollY) ? "bottom left" : "top left" });
     };
 
-    // compute initially after render, use requestAnimationFrame to ensure DOM mounted
     const raf = requestAnimationFrame(computePosition);
     const onResize = () => computePosition();
     const onScroll = () => computePosition();
@@ -107,21 +113,15 @@ export default function FilterPanel({
     setDescriptions((prev) => (prev.includes(option) ? prev.filter((d) => d !== option) : [...prev, option]));
   };
 
-  useEffect(() => {
-  if (penaltyMode !== "penalty") {
-    setPenaltyMin("");
-    setPenaltyMax("");
-  }
-}, [penaltyMode]);
-
   const handleApply = () => {
     onApply?.({
-      
       name: name.trim(),
       descriptions,
       penaltyMode,
       penaltyMin: penaltyMin === "" ? "" : Number(penaltyMin),
       penaltyMax: penaltyMax === "" ? "" : Number(penaltyMax),
+      dateFrom: dateFrom || "",
+      dateTo: dateTo || "",
     });
     onClose?.();
   };
@@ -132,6 +132,8 @@ export default function FilterPanel({
     setPenaltyMode("any");
     setPenaltyMin("");
     setPenaltyMax("");
+    setDateFrom("");
+    setDateTo("");
     onClear?.();
     onClose?.();
   };
@@ -143,7 +145,7 @@ export default function FilterPanel({
       ref={panelRef}
       className="position-absolute p-3 rounded"
       style={{
-        zIndex: 2000,
+        zIndex: 3000,
         width: PANEL_WIDTH,
         background: "#FFFFFF",
         border: "1px solid #030303",
@@ -172,30 +174,28 @@ export default function FilterPanel({
         </button>
       </div>
 
-      {/* Name */}
+      {/* Owner name */}
       <div className="mb-3">
         <label className="form-label mb-1" style={{ fontSize: ".8rem" }}>
-          Name
+          Owner name
         </label>
         <input
           className="form-control form-control-sm"
           placeholder="Owner name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{
-            border: "1px solid #D4C9BE",
-          }}
+          style={{ border: "1px solid #D4C9BE" }}
         />
       </div>
 
-      {/* Description */}
+      {/* Description (checkbox list) */}
       <div className="mb-3">
         <label className="form-label mb-1" style={{ fontSize: ".8rem" }}>
           Description
         </label>
         <div
           style={{
-            maxHeight: 130,
+            maxHeight: 110,
             overflowY: "auto",
             border: "1px solid #D4C9BE",
             padding: 8,
@@ -203,7 +203,7 @@ export default function FilterPanel({
           }}
         >
           {descriptionOptions.map((opt) => (
-            <div key={opt} className="form-check">
+            <div className="form-check" key={opt}>
               <input
                 id={`desc-${opt}`}
                 className="form-check-input"
@@ -211,11 +211,7 @@ export default function FilterPanel({
                 checked={descriptions.includes(opt)}
                 onChange={() => toggleDescription(opt)}
               />
-              <label
-                className="form-check-label"
-                htmlFor={`desc-${opt}`}
-                style={{ fontSize: ".85rem" }}
-              >
+              <label className="form-check-label" htmlFor={`desc-${opt}`} style={{ fontSize: ".85rem" }}>
                 {opt}
               </label>
             </div>
@@ -240,50 +236,60 @@ export default function FilterPanel({
                 checked={penaltyMode === mode}
                 onChange={() => setPenaltyMode(mode)}
               />
-              <label
-                className="form-check-label"
-                htmlFor={`pen-${mode}`}
-                style={{ fontSize: ".85rem" }}
-              >
+              <label className="form-check-label" htmlFor={`pen-${mode}`} style={{ fontSize: ".85rem" }}>
                 {mode === "any" ? "Any" : mode === "penalty" ? "Penalty" : "No Penalty"}
               </label>
             </div>
           ))}
         </div>
 
-        {penaltyMode !== "no-penalty" && (
-          <div className="d-flex gap-2 mt-2">
-            <input
-              type="number"
-              className="form-control form-control-sm"
-              placeholder="Min"
-              value={penaltyMin}
-              onChange={(e) => setPenaltyMin(e.target.value)}
-              min={0}
-              style={{
-                maxWidth: 100,
-                border: "1px solid #D4C9BE",
-              }}
-            />
-            <input
-              type="number"
-              className="form-control form-control-sm"
-              placeholder="Max"
-              value={penaltyMax}
-              onChange={(e) => setPenaltyMax(e.target.value)}
-              min={0}
-              style={{
-                maxWidth: 100,
-                border: "1px solid #D4C9BE",
-              }}
-            />
-          </div>
-        )}
+        <div className="d-flex gap-2 mt-2">
+          <input
+            type="number"
+            className="form-control form-control-sm"
+            placeholder="Min"
+            value={penaltyMin}
+            onChange={(e) => setPenaltyMin(e.target.value)}
+            min={0}
+            style={{ maxWidth: 100, border: "1px solid #D4C9BE" }}
+          />
+          <input
+            type="number"
+            className="form-control form-control-sm"
+            placeholder="Max"
+            value={penaltyMax}
+            onChange={(e) => setPenaltyMax(e.target.value)}
+            min={0}
+            style={{ maxWidth: 100, border: "1px solid #D4C9BE" }}
+          />
+        </div>
+      </div>
 
+      {/* Date range */}
+      <div className="mb-3">
+        <label className="form-label mb-1" style={{ fontSize: ".8rem" }}>
+          Date range
+        </label>
+        <div className="d-flex gap-2">
+          <input
+            type="date"
+            className="form-control form-control-sm"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            style={{ border: "1px solid #D4C9BE" }}
+          />
+          <input
+            type="date"
+            className="form-control form-control-sm"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            style={{ border: "1px solid #D4C9BE" }}
+          />
+        </div>
       </div>
 
       {/* Actions */}
-      <div className="d-flex justify-content-end gap-2 mt-3">
+      <div className="d-flex justify-content-end gap-2 mt-2">
         <button
           className="btn btn-sm"
           onClick={handleClear}

@@ -1,13 +1,25 @@
 import React, { useEffect, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
+import UserFilterPanel from "./UserFilterPanel";
+import { CiFilter } from "react-icons/ci";
 
 function UserManagement() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editedUser, setEditedUser] = useState({});
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+  // Advanced user filter
+  const [userFilterOpen, setUserFilterOpen] = useState(false);
+  const [userAdvancedFilters, setUserAdvancedFilters] = useState({
+    username: "",
+    email: "",
+    types: [],
+    statuses: [],
+  });
 
   const API_BASE_URL =
     process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
@@ -127,11 +139,49 @@ function UserManagement() {
       u.userCredentials.type !== "guard"
   );
 
-  const filteredUsers = visibleUsers.filter((u) =>
-    `${u.firstname} ${u.lastname}`
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  );
+  // helper to extract date portion (YYYY-MM-DD) from possible date fields
+  const isoDateFor = (u) => {
+    const possible = u.createdAt || u.registeredAt || u.updatedAt || "";
+    try {
+      return new Date(possible).toISOString().slice(0, 10);
+    } catch {
+      return "";
+    }
+  };
+
+  // Apply search text + date + advanced user filters
+  const filteredUsers = visibleUsers.filter((u) => {
+    // search by full name
+    const fullName = `${u.firstname || ""} ${u.lastname || ""}`.toLowerCase();
+    if (search && !fullName.includes(search.toLowerCase())) return false;
+
+    // date filter (matches user's created/registered/updated date)
+    if (dateFilter) {
+      const userDate = isoDateFor(u);
+      if (!userDate || userDate !== dateFilter) return false;
+    }
+
+    const { username, email, types, statuses } = userAdvancedFilters;
+
+    if (username) {
+      const uname = (u.userCredentials?.username || "").toLowerCase();
+      if (!uname.includes(username.toLowerCase())) return false;
+    }
+
+    if (email) {
+      const uemail = (u.userCredentials?.email || "").toLowerCase();
+      if (!uemail.includes(email.toLowerCase())) return false;
+    }
+
+    if (types.length > 0) {
+      if (!types.includes(u.userCredentials?.type)) return false;
+    }
+
+    if (statuses.length > 0) {
+      if (!statuses.includes(u.userCredentials?.status)) return false;
+    }
+    return true;
+  });
 
   /* ---------------- TIME AGO ---------------- */
   const timeAgo = (date) => {
@@ -147,6 +197,60 @@ function UserManagement() {
       ? Math.max(...visibleUsers.map((u) => new Date(u.updatedAt)))
       : new Date();
 
+  /* ---------------- User filter handlers ---------------- */
+  const handleApplyUserFilters = (filters) => {
+    setUserAdvancedFilters({
+      username: filters.username || "",
+      email: filters.email || "",
+      types: filters.types || [],
+      statuses: filters.statuses || [],
+    });
+    showToast("User filters applied", "success");
+  };
+
+  const handleClearUserFilters = () => {
+    setUserAdvancedFilters({
+      username: "",
+      email: "",
+      types: [],
+      statuses: [],
+    });
+    showToast("User filters cleared", "success");
+  };
+
+  const handleClearAll = () => {
+    setSearch("");
+    setDateFilter("");
+    handleClearUserFilters();
+    setUserFilterOpen(false);
+    showToast("All filters cleared", "success");
+  };
+
+  const activeUserFilterCount = (() => {
+    let c = 0;
+
+    if (userAdvancedFilters.username) c++;
+    if (userAdvancedFilters.email) c++;
+
+    if (userAdvancedFilters.types?.length)
+      c += userAdvancedFilters.types.length;
+
+    if (userAdvancedFilters.statuses?.length)
+      c += userAdvancedFilters.statuses.length;
+
+    return c;
+  })();
+
+  const formatDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   return (
     <div className="container-fluid p-2">
       {/* PAGE HEADER */}
@@ -161,16 +265,57 @@ function UserManagement() {
           </small>
         </div>
 
-        <div className="d-flex gap-2">
-          {/* <button>+ Add user</button> */}
+        <div className="d-flex gap-2 align-items-center">
+          {/* Date filter */}
+          <input
+            type="date"
+            className="form-control mt-2"
+            style={{ maxWidth: 170, height: "37px",  }}
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            aria-label="Filter by date"
+            title="Filter by date"
+          />
+
+          {/* Advanced filters button */}
+          <button
+            className="form-control border btn mt-2 d-flex align-items-center"
+            onClick={() => setUserFilterOpen((v) => !v)}
+            title="Advanced filters"
+            style={{
+              background: activeUserFilterCount > 0 ? "#123458" : "#fff",
+              color: activeUserFilterCount > 0 ? "#F1EFEC" : "#030303",
+              height: "37px",
+              width: "auto",
+              padding: "0 10px",
+              whiteSpace: "nowrap",
+            }}
+            aria-expanded={userFilterOpen}
+            aria-pressed={userFilterOpen}
+          >
+            <CiFilter style={{ marginRight: 8 }} /> Filters{activeUserFilterCount > 0 ? ` (${activeUserFilterCount})` : ""}
+          </button>
+
+          {/* Clear filters */}
+          <button
+            className="form-control btn border mt-2"
+            onClick={handleClearAll}
+            title="Clear filters/search"
+            style={{ height: "37px", width: "100px" }}
+          >
+            Clear
+          </button>
+
+          {/* Search */}
           <input
             className="form-control mt-2"
             placeholder="Search user"
-            style={{ maxWidth: 240, height: "37px" }}
+            style={{ maxWidth: 240, height: "37px", }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search users by name"
           />
-          </div>
+        </div>
       </div>
 
       {/* TABLE CARD */}
@@ -186,12 +331,13 @@ function UserManagement() {
             <table className="table mb-0 align-middle">
               <colgroup>
                 <col style={{ width: "4%" }} />   {/* # */}
-                <col style={{ width: "25%" }} />  {/* Full Name */}
+                <col style={{ width: "24%" }} />  {/* Full Name */}
                 <col style={{ width: "12%" }} />  {/* Username */}
-                <col style={{ width: "28%" }} />  {/* Email */}
-                <col style={{ width: "8%" }} />   {/* Type */}
+                <col style={{ width: "24%" }} />  {/* Email */}
+                <col style={{ width: "8%" }} />   {/* Date */}
+                <col style={{ width: "8%" }} />   {/* Type */}  
                 <col style={{ width: "8%" }} />   {/* Status */}
-                <col style={{ width: "15%" }} />  {/* Actions */}
+                <col style={{ width: "20%" }} />  {/* Actions */}
               </colgroup>
               <thead>
                 <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
@@ -199,6 +345,7 @@ function UserManagement() {
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Full Name</th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Username</th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Email</th>
+                  <th title="account creation date" style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Date</th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Type</th>
                   <th
                     className="text-center"
@@ -280,6 +427,11 @@ function UserManagement() {
                       ) : (
                         u.userCredentials.email
                       )}
+                    </td>
+
+                    {/* DATE */}
+                    <td>
+                      <small className="text-muted">{formatDate(u.createdAt || u.registeredAt || u.updatedAt)}</small>
                     </td>
 
                     {/* TYPE */}
@@ -372,7 +524,7 @@ function UserManagement() {
                             }}
                             onClick={() => handleDelete(u._id)}
                           >
-                            Delete
+                            Archive
                           </button>
                         </>
                       )}
@@ -389,6 +541,18 @@ function UserManagement() {
           {timeAgo(getLastUpdated())}
         </div>
       </div>
+
+      {/* User filter panel portal */}
+      <UserFilterPanel
+        show={userFilterOpen}
+        onClose={() => setUserFilterOpen(false)}
+        onApply={(f) => handleApplyUserFilters(f)}
+        onClear={() => {
+          handleClearUserFilters();
+          setUserFilterOpen(false);
+        }}
+        initialFilters={userAdvancedFilters}
+      />
 
       {/* TOAST */}
       {toast.show && (

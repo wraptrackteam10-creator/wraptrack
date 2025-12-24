@@ -2,14 +2,20 @@
 const mongoose = require("mongoose");
 
 const tempSignupSchema = new mongoose.Schema({
-  firstname: { type: String, required: true },
-  lastname: { type: String, required: true },
-  username: { type: String, required: true, unique: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  type: { type: String, enum: ["student", "faculty", "visitor"], default: "student" },
-  otp: { type: String, required: true },
-  otpExpiresAt: { type: Date, required: true },
+  firstname: String,
+  lastname: String,
+  username: String,
+  email: String,
+  password: String,
+  type: {
+    type: String,
+    enum: ["student", "faculty"]
+  },
+  institute: String,
+  program: String,
+  otp: String,
+  otpExpiresAt: Date,
 }, { timestamps: true });
 
 module.exports = mongoose.model("TempSignup", tempSignupSchema);
+

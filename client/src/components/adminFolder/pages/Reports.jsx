@@ -186,16 +186,13 @@ function Reports() {
   });
 
   // --- Weekly Bar Chart (FIXED) ---
-  // Count item records per week using depositedAt / claimedAt / unclaimedAt timestamps.
   const weeklyDataBar = [];
-  // Week 1 starts at Jan 1; each week is 7-day block [startWeek .. endWeek]
   const startOfYear = new Date(currentYear, 0, 1);
   for (let w = 0; w < 52; w++) {
     const startWeek = new Date(startOfYear);
     startWeek.setDate(startWeek.getDate() + w * 7);
     const endWeek = new Date(startWeek);
     endWeek.setDate(endWeek.getDate() + 6);
-    // Normalize times to start/end of day to avoid time-of-day edge cases
     startWeek.setHours(0, 0, 0, 0);
     endWeek.setHours(23, 59, 59, 999);
 
@@ -218,7 +215,6 @@ function Reports() {
       }
     });
 
-    // label includes week number and a short date range for clarity
     const label = `W${w + 1} (${startWeek.toISOString().slice(5, 10)}-${endWeek.toISOString().slice(5, 10)})`;
     weeklyDataBar.push({
       week: label,
@@ -235,7 +231,7 @@ function Reports() {
     const total = claimedCount + unclaimedCount + penalizedCount;
     if (total === 0) return "No data available.";
     const unclaimedPercent = ((unclaimedCount / total) * 100).toFixed(0);
-    return `About ${unclaimedPercent}% of deposited items remain unclaimed.`;
+    return `About ${unclaimedPercent}% of deposited items remain unclaimed. This suggests follow-up or notification improvements may help reunite owners with their items.`;
   };
 
   const monthlyBarInterpreter = () => {
@@ -253,30 +249,28 @@ function Reports() {
     const sorted = Object.entries(totalDeposits).sort((a, b) => b[1] - a[1]);
     if (sorted.length === 0) return "No deposited items found this year.";
     const topItems = sorted.slice(0, 2).map((item) => item[0]);
-    return `${topItems.join(" and ")} are the top deposited items this year.`;
+    return `${topItems.join(" and ")} are the top deposited items this year, indicating these categories are most commonly lost or left behind.`;
   };
 
   const weeklyBarInterpreter = () => {
     if (weeklyDataBar.length === 0) return "No weekly data available.";
-    // pick week with highest total activity (deposited + claimed + unclaimed)
     const topWeek = weeklyDataBar.reduce((prev, curr) => {
       const prevSum = prev.deposited + prev.claimed + prev.unclaimed;
       const currSum = curr.deposited + curr.claimed + curr.unclaimed;
       return currSum > prevSum ? curr : prev;
     }, weeklyDataBar[0]);
-    // friendly date range
     const start = new Date(topWeek._start);
     const end = new Date(topWeek._end);
     const startLabel = `${start.getMonth() + 1}/${start.getDate()}`;
     const endLabel = `${end.getMonth() + 1}/${end.getDate()}`;
-    return `${topWeek.week} (${startLabel} - ${endLabel}) had the highest activity with ${topWeek.deposited} deposited, ${topWeek.claimed} claimed, and ${topWeek.unclaimed} unclaimed records.`;
+    return `${topWeek.week} (${startLabel} - ${endLabel}) had the highest activity with ${topWeek.deposited} deposited, ${topWeek.claimed} claimed, and ${topWeek.unclaimed} unclaimed records. Consider investigating events or periods that drove the spike.`;
   };
 
   const lineChartInterpreter = () => {
     const totalPerClass = {};
     classNames.forEach((c) => (totalPerClass[c] = 0));
     items
-      .filter((it) => it.depositedAt) // use depositedAt as true marker of a deposit
+      .filter((it) => it.depositedAt)
       .forEach((it) => {
         if (!it.description) return;
         classNames.forEach((cls) => {
@@ -288,21 +282,94 @@ function Reports() {
       });
     const topClass = Object.entries(totalPerClass).sort((a, b) => b[1] - a[1])[0];
     if (!topClass || topClass[1] === 0) return "No deposits recorded for any class this year.";
-    return `${topClass[0]} had the highest deposits this year, showing a clear trend in user activity.`;
+    return `${topClass[0]} had the highest deposits this year, showing a clear trend in user activity — this may help prioritize inventory, signage, or education for that item type.`;
   };
 
-  // --- PDF Generation ---
+  // --- PDF Generation (includes narrative report) ---
   const generatePDF = async () => {
     const pdf = new jsPDF("p", "mm", "a4");
     let y = 10;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const usableWidth = pageWidth - margin * 2;
+
+    // Add header with report title and timestamp
+    pdf.setFontSize(16);
+    pdf.text(`Item Report — ${currentYear}`, margin, y);
+    pdf.setFontSize(9);
+    const nowLabel = new Date().toLocaleString();
+    pdf.text(`Generated: ${nowLabel}`, margin, y + 6);
+    y += 12;
+
+    // Render chart area as image if available
     if (chartRef.current) {
-      const canvas = await html2canvas(chartRef.current, { scale: 2 });
-      const imgData = canvas.toDataURL("image/png");
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth() - 20;
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      pdf.addImage(imgData, "PNG", 10, y, pdfWidth, pdfHeight);
-      y += pdfHeight + 10;
+      try {
+        const canvas = await html2canvas(chartRef.current, { scale: 2 });
+        const imgData = canvas.toDataURL("image/png");
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = usableWidth;
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        if (y + pdfHeight > pageHeight - 30) {
+          pdf.addPage();
+          y = margin;
+        }
+        pdf.addImage(imgData, "PNG", margin, y, pdfWidth, pdfHeight);
+        y += pdfHeight + 8;
+      } catch (err) {
+        // ignore chart capture errors but continue
+        console.warn("Failed to render charts to image:", err);
+      }
+    }
+
+    // Narrative section (human-readable insights)
+    const narratives = [
+      {
+        title: "Executive Summary",
+        text: `This report summarizes item deposit and claim activity for ${currentYear}. In total there are ${summary.totalDeposited} deposited records and ${summary.totalClaimed} successful claims. ${summary.unclaimed} items remain unclaimed and ${summary.penalized} items received penalties. The system has ${summary.totalUsers} users (${summary.activeUsers} active). Average time to claim an item is ${summary.avgClaimTime} hours.`,
+      },
+      { title: "Claimed vs Unclaimed", text: pieInterpreter() },
+      { title: "Monthly Top Items", text: monthlyBarInterpreter() },
+      { title: "Weekly Activity Highlight", text: weeklyBarInterpreter() },
+      { title: "Monthly Deposit Trend", text: lineChartInterpreter() },
+      {
+        title: "Recommendations",
+        text:
+          "1) Investigate causes of high unclaimed rate and consider automated reminders.\n" +
+          "2) Prioritize signage or communications for the top deposited item classes.\n" +
+          "3) Review peak weeks to align staff or outreach with high-traffic periods.",
+      },
+    ];
+
+    pdf.setFontSize(12);
+    pdf.text("Narrative Report", margin, y);
+    y += 6;
+    pdf.setFontSize(10);
+
+    for (const n of narratives) {
+      const headingLines = pdf.splitTextToSize(n.title, usableWidth);
+      if (y + headingLines.length * 6 > pageHeight - 20) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.setFont(undefined, "bold");
+      pdf.text(headingLines, margin, y);
+      y += headingLines.length * 6;
+
+      pdf.setFont(undefined, "normal");
+      const wrapped = pdf.splitTextToSize(n.text, usableWidth);
+      if (y + wrapped.length * 6 > pageHeight - 20) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.text(wrapped, margin, y);
+      y += wrapped.length * 6 + 6;
+    }
+
+    // Add a summary table below narratives
+    if (y + 60 > pageHeight - 20) {
+      pdf.addPage();
+      y = margin;
     }
 
     const tableColumn = ["Metric / Chart", "Description", "Current Value / Insight"];
@@ -324,9 +391,17 @@ function Reports() {
       startY: y,
       head: [tableColumn],
       body: tableRows,
-      margin: { left: 10, right: 10 },
+      margin: { left: margin, right: margin },
       styles: { fontSize: 9, textColor: "#030303" },
       headStyles: { fillColor: [212, 201, 190] },
+      columnStyles: {
+        0: { cellWidth: 45 },
+        1: { cellWidth: 70 },
+        2: { cellWidth: usableWidth - 45 - 70 },
+      },
+      didDrawPage: (data) => {
+        // nothing extra
+      },
     });
 
     pdf.save(`Item_Report_${currentYear}.pdf`);
@@ -456,49 +531,48 @@ function Reports() {
             </div>
           </div>
         </div>
-
       </div>
-      
+
       {/* SUMMARY TABLE */}
-        <div className="row g-3 mb-3">
-          <div className="col-12">
-            <div className="card p-3 shadow-sm rounded" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
-              <h6 className="fw-semibold mb-3 text-center text-secondary">📊 Summary & Insights</h6>
-              <div className="table-responsive">
-                <table className="table table-bordered table-hover">
-                  <thead style={{ background: "#FFFFFF", borderBottom: "1px solid #D4C9BE" }}>
-                    <tr style={{ color: "#D4C9BE" }}>
-                      <th>Metric / Chart</th>
-                      <th>Description</th>
-                      <th>Current Value / Insight</th>
+      <div className="row g-3 mb-3">
+        <div className="col-12">
+          <div className="card p-3 shadow-sm rounded" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
+            <h6 className="fw-semibold mb-3 text-center text-secondary">📊 Summary & Insights</h6>
+            <div className="table-responsive">
+              <table className="table table-bordered table-hover">
+                <thead style={{ background: "#FFFFFF", borderBottom: "1px solid #D4C9BE" }}>
+                  <tr style={{ color: "#D4C9BE" }}>
+                    <th>Metric / Chart</th>
+                    <th>Description</th>
+                    <th>Current Value / Insight</th>
+                  </tr>
+                </thead>
+                <tbody style={{ color: "#030303" }}>
+                  {[
+                    { metric: "Total Deposited Logs", description: "Number of items deposited in the system.", value: summary.totalDeposited },
+                    { metric: "Total Claimed Logs", description: "Number of deposited items that were claimed.", value: summary.totalClaimed },
+                    { metric: "Unclaimed Logs", description: "Deposited items that have not been claimed yet.", value: summary.unclaimed },
+                    { metric: "Penalized Items", description: "Deposited items with penalties applied.", value: summary.penalized },
+                    { metric: "Total Users", description: "All users excluding admin and guards.", value: summary.totalUsers },
+                    { metric: "Active Users", description: "Users who are currently active in the system.", value: summary.activeUsers },
+                    { metric: "Average Claim Time (hrs)", description: "Average time between depositing and claiming an item.", value: summary.avgClaimTime },
+                    { metric: "Claimed vs Unclaimed Pie Chart", description: "Shows proportion of claimed, unclaimed, and penalized items.", value: pieInterpreter() },
+                    { metric: "Monthly Top Items Bar Chart", description: "Shows which items are most deposited, claimed, or unclaimed each month.", value: monthlyBarInterpreter() },
+                    { metric: "Weekly Deposited/Claimed/Unclaimed Chart", description: "Shows weekly activity trends across the year.", value: weeklyBarInterpreter() },
+                    { metric: "Monthly Deposited Trend Line Chart", description: "Displays trends of item deposits per class each month.", value: lineChartInterpreter() },
+                  ].map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.metric}</td>
+                      <td>{item.description}</td>
+                      <td>{typeof item.value === "number" ? item.value : item.value}</td>
                     </tr>
-                  </thead>
-                  <tbody style={{ color: "#030303" }}>
-                    {[
-                      { metric: "Total Deposited Logs", description: "Number of items deposited in the system.", value: summary.totalDeposited },
-                      { metric: "Total Claimed Logs", description: "Number of deposited items that were claimed.", value: summary.totalClaimed },
-                      { metric: "Unclaimed Logs", description: "Deposited items that have not been claimed yet.", value: summary.unclaimed },
-                      { metric: "Penalized Items", description: "Deposited items with penalties applied.", value: summary.penalized },
-                      { metric: "Total Users", description: "All users excluding admin and guards.", value: summary.totalUsers },
-                      { metric: "Active Users", description: "Users who are currently active in the system.", value: summary.activeUsers },
-                      { metric: "Average Claim Time (hrs)", description: "Average time between depositing and claiming an item.", value: summary.avgClaimTime },
-                      { metric: "Claimed vs Unclaimed Pie Chart", description: "Shows proportion of claimed, unclaimed, and penalized items.", value: pieInterpreter() },
-                      { metric: "Monthly Top Items Bar Chart", description: "Shows which items are most deposited, claimed, or unclaimed each month.", value: monthlyBarInterpreter() },
-                      { metric: "Weekly Deposited/Claimed/Unclaimed Chart", description: "Shows weekly activity trends across the year.", value: weeklyBarInterpreter() },
-                      { metric: "Monthly Deposited Trend Line Chart", description: "Displays trends of item deposits per class each month.", value: lineChartInterpreter() },
-                    ].map((item, idx) => (
-                      <tr key={idx}>
-                        <td>{item.metric}</td>
-                        <td>{item.description}</td>
-                        <td>{typeof item.value === "number" ? item.value : item.value}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
+      </div>
     </div>
   );
 }

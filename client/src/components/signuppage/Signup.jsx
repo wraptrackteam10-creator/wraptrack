@@ -390,7 +390,7 @@ function Signup() {
                 <option value="">Select Institute / Faculty</option>
                 {institutes.map(inst => (
                   <option key={inst.code} value={inst.code}>
-                    {inst.code} — {inst.name}
+                    {inst.code} - {inst.name}
                   </option>
                 ))}
               </select>
@@ -409,7 +409,7 @@ function Signup() {
 
                 {selectedInstitute?.programs.map(prog => (
                   <option key={prog.code} value={prog.code}>
-                    {prog.code} — {prog.name}
+                    {prog.code} - {prog.name}
                   </option>
                 ))}
               </select>

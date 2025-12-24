@@ -5,6 +5,8 @@ const userSchema = new mongoose.Schema(
     firstname: { type: String, required: true },
     lastname: { type: String, required: true },
     userCredentials: {
+      institute: { type: String, required: true },
+      program: { type: String, required: true },
       username: { type: String, required: true, unique: true },
       password: { type: String, required: true },
       type: { type: String, enum: ["student", "faculty", "visitor", "guard", "admin"], required: true },

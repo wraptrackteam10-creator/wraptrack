@@ -146,17 +146,11 @@ function UserHomePage() {
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedImage(
-                      `${API_BASE_URL}/api/items/${item._id}/photo`
-                    );
+                    setSelectedImage(item.photoUrl || "/logo.png");
                   }}
                 >
                   <img
-                    src={
-                      item.photo?.data
-                        ? `${API_BASE_URL}/api/items/${item._id}/photo`
-                        : "/logo.png"
-                    }
+                    src={item.photoUrl || "/logo.png"}
                     alt="Item"
                     style={{
                       position: "absolute",
