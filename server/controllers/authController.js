@@ -118,8 +118,36 @@ const signup = async (req, res) => {
     }
 
     // Send OTP email
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+    // await transporter.sendMail({
+    //   from: process.env.EMAIL_USER,
+    //   to: email,
+    //   subject: "WraPTrack Account Verification Code",
+    //   html: `
+    //     <p>Hello,</p>
+
+    //     <p>Thank you for registering with <b>WraPTrack</b>.</p>
+
+    //     <p>Your One-Time Password (OTP) for account verification is:</p>
+
+    //     <h2 style="letter-spacing: 2px;"><b>${otp}</b></h2>
+
+    //     <p>This code will expire in <b>10 minutes</b>.</p>
+
+    //     <p style="color: #666;">
+    //       Please do not share this code with anyone for security reasons.
+    //     </p>
+
+    //     <p>
+    //       If you did not request this verification, please ignore this email.
+    //     </p>
+
+    //     <br />
+    //     <p>— WraPTrack Team</p>
+    //   `,
+    // });
+
+    await resend.emails.send({
+      from: "WraPTrack <onboarding@resend.dev>",
       to: email,
       subject: "WraPTrack Account Verification Code",
       html: `
@@ -137,15 +165,10 @@ const signup = async (req, res) => {
           Please do not share this code with anyone for security reasons.
         </p>
 
-        <p>
-          If you did not request this verification, please ignore this email.
-        </p>
-
         <br />
         <p>— WraPTrack Team</p>
       `,
     });
-
 
     res.status(200).json({ message: `OTP sent to ${email}. Please verify to complete signup.` });
 
