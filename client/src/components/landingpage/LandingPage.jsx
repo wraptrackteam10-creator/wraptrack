@@ -8,6 +8,8 @@ import Login from '../loginpage/Login';
 
 function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   // ✅ Infinite carousel refs
   const trackRef = useRef(null);
@@ -24,16 +26,12 @@ function LandingPage() {
     const animate = () => {
       if (trackRef.current && !isPausedRef.current) {
         position -= speed;
-
         const halfWidth = trackRef.current.scrollWidth / 2;
-
         if (Math.abs(position) >= halfWidth) {
           position = 0;
         }
-
         trackRef.current.style.transform = `translateX(${position}px)`;
       }
-
       animationId = requestAnimationFrame(animate);
     };
 
@@ -41,9 +39,40 @@ function LandingPage() {
     return () => cancelAnimationFrame(animationId);
   }, []);
 
+  // ✅ PWA Install Event
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault(); // Prevent automatic prompt
+      setDeferredPrompt(e); // Store for later use
+    };
+
+    const appInstalledHandler = () => {
+      setIsInstalled(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", appInstalledHandler);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", appInstalledHandler);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt(); // Show the native install prompt
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log("User choice:", outcome);
+      setDeferredPrompt(null); // Clear stored prompt
+    } else {
+      alert("PWA installation is not supported or already installed.");
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F1EFEC" }}>
-      
+
       {/* HEADER */}
       <header
         className="d-flex justify-content-between align-items-center px-4 py-3"
@@ -55,7 +84,13 @@ function LandingPage() {
         </div>
 
         <div className="d-none d-md-flex gap-2">
-          <button className="btn btn-outline-light btn-sm">Install</button>
+          <button
+            className="btn btn-outline-light btn-sm"
+            onClick={handleInstallClick}
+            disabled={isInstalled}
+          >
+            {isInstalled ? "Installed ✅" : "Install"}
+          </button>
           <NavLink to="/sign-in">
             <button className="btn btn-outline-light btn-sm">Sign in</button>
           </NavLink>
@@ -88,7 +123,13 @@ function LandingPage() {
           overflow: "hidden",
         }}
       >
-        <button className="btn btn-outline-light btn-sm">Install</button>
+        <button
+          className="btn btn-outline-light btn-sm"
+          onClick={handleInstallClick}
+          disabled={isInstalled}
+        >
+          {isInstalled ? "Installed ✅" : "Install"}
+        </button>
         <NavLink to="/sign-in">
             <button className="btn btn-outline-light btn-sm">Sign in</button>
         </NavLink>
@@ -131,7 +172,7 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* ✅ INFINITE CAROUSEL SECTION (PAUSE ON HOVER / TOUCH) */}
+      {/* INFINITE CAROUSEL SECTION */}
       <section className="container pb-5">
         <div
           className="p-4"
