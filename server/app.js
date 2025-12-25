@@ -50,12 +50,37 @@ app.use("/api", settingsRoutes);
 
 // ✅ Auto-update Deposited / Pending Verification → Unclaimed
 // Runs every 1 minute
+
+// cron.schedule("* * * * *", async () => {
+//   try {
+//     console.log("⏱️ Running 1-min auto-update for Unclaimed items...");
+//     await autoUpdateUnclaimedItems();
+//   } catch (err) {
+//     console.error("❌ Cron auto-update failed:", err.message);
+//   }
+// }, { timezone: "Asia/Manila" });
+
+const { cleanupExpiredTempSignups } = require("./controllers/authController");
+
 cron.schedule("* * * * *", async () => {
+  console.log("⏱️ Running 1-minute maintenance jobs...");
+
   try {
-    console.log("⏱️ Running 1-min auto-update for Unclaimed items...");
     await autoUpdateUnclaimedItems();
   } catch (err) {
-    console.error("❌ Cron auto-update failed:", err.message);
+    console.error("❌ Auto-update Unclaimed failed:", err.message);
+  }
+
+  try {
+    await autoApplyDailyPenalty(); // 💸 ADD PENALTY HERE
+  } catch (err) {
+    console.error("❌ Auto penalty failed:", err.message);
+  }
+
+  try {
+    await cleanupExpiredTempSignups();
+  } catch (err) {
+    console.error("❌ Cleanup expired temp signups failed:", err.message);
   }
 }, { timezone: "Asia/Manila" });
 
@@ -71,11 +96,10 @@ cron.schedule("0 23 * * *", async () => {
   }
 }, { timezone: "Asia/Manila" });
 
-const { cleanupExpiredTempSignups } = require("./controllers/authController");
 // Runs every 1 minute
-cron.schedule("* * * * *", async () => {
-  await cleanupExpiredTempSignups();
-}, { timezone: "Asia/Manila" });
+// cron.schedule("* * * * *", async () => {
+//   await cleanupExpiredTempSignups();
+// }, { timezone: "Asia/Manila" });
 
 /* ----------------------------------------- */
 

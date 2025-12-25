@@ -137,6 +137,61 @@ const autoUpdateUnclaimedItems = async () => {
 };
 
 // ===============================================================
+//  AUTO APPLY DAILY PENALTY FOR UNCLAIMED ITEMS
+// ===============================================================
+const autoApplyDailyPenalty = async () => {
+  try {
+    const now = new Date();
+
+    // Start of today (00:00)
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    // Get all unclaimed items
+    const unclaimedItems = await Item.find({ status: "Unclaimed" });
+
+    let penalizedCount = 0;
+
+    for (const item of unclaimedItems) {
+      // If penalty was already applied today → skip
+      if (item.lastPenaltyAt && item.lastPenaltyAt >= startOfToday) {
+        continue;
+      }
+
+      // Apply penalty
+      item.penalty += 1;
+      item.lastPenaltyAt = now;
+
+      await item.save();
+
+      await Log.create({
+        userId: item.userId,
+        itemId: item._id,
+        action: "Daily Penalty",
+        status: "Unclaimed",
+        description: item.description,
+        photoUrl: item.photoUrl,
+      });
+
+      await Notification.create({
+        userId: item.userId,
+        message: `A penalty was added for your unclaimed item "${item.description}".`,
+        read: false,
+      });
+
+      penalizedCount++;
+    }
+
+    console.log(`💸 Daily penalties applied: ${penalizedCount}`);
+  } catch (error) {
+    console.error("Auto Penalty Error:", error);
+  }
+};
+
+// ===============================================================
 //  AUTO ARCHIVE UNCLAIMED ITEMS
 // ===============================================================
 const autoArchiveUnclaimedItems = async () => {
@@ -229,6 +284,7 @@ const updateItemStatus = async (req, res) => {
     } else if (status === "Claimed") {
       if (!item.claimedAt) item.claimedAt = new Date();
       item.unclaimedAt = null;
+      item.lastPenaltyAt = null;
     }
 
     item.status = status;
@@ -370,6 +426,7 @@ module.exports = {
   updateItemAction,
   updateItemStatus,
   autoUpdateUnclaimedItems,
+  autoApplyDailyPenalty,
   autoArchiveUnclaimedItems,
   getItemSummary,
   updateItem,

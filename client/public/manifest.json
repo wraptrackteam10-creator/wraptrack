@@ -1,7 +1,8 @@
 {
   "name": "WraPTrack",
   "short_name": "WraPTrack PWA",
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0d6efd",

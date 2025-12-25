@@ -1,7 +1,7 @@
 const User = require("../models/userModel");
 const TempSignup = require("../models/tempSignupModel");
 const bcrypt = require("bcryptjs");
-// const nodemailer = require("nodemailer");
+const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 // do not add this const fetch = require("node-fetch"); // make sure fetch is available
 const jwt = require("jsonwebtoken");
@@ -13,14 +13,14 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const allowedRoles = ["student", "faculty", "visitor", "guard", "admin"];
 
-// // Nodemailer transporter
-// const transporter = nodemailer.createTransport({
-//   service: "gmail",
-//   auth: {
-//     user: process.env.EMAIL_USER,
-//     pass: process.env.EMAIL_PASS,
-//   },
-// });
+// Nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 // Verify email via Abstract API
 const verifyEmailWithAbstract = async (email) => {
@@ -118,8 +118,36 @@ const signup = async (req, res) => {
     }
 
     // Send OTP email
-    // await transporter.sendMail({
-    //   from: process.env.EMAIL_USER,
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "WraPTrack Account Verification Code",
+      html: `
+        <p>Hello,</p>
+
+        <p>Thank you for registering with <b>WraPTrack</b>.</p>
+
+        <p>Your One-Time Password (OTP) for account verification is:</p>
+
+        <h2 style="letter-spacing: 2px;"><b>${otp}</b></h2>
+
+        <p>This code will expire in <b>10 minutes</b>.</p>
+
+        <p style="color: #666;">
+          Please do not share this code with anyone for security reasons.
+        </p>
+
+        <p>
+          If you did not request this verification, please ignore this email.
+        </p>
+
+        <br />
+        <p>— WraPTrack Team</p>
+      `,
+    });
+
+    // const { data, error } = await resend.emails.send({
+    //   from: "WraPTrack <onboarding@resend.dev>",
     //   to: email,
     //   subject: "WraPTrack Account Verification Code",
     //   html: `
@@ -145,13 +173,6 @@ const signup = async (req, res) => {
     //     <p>— WraPTrack Team</p>
     //   `,
     // });
-
-    const { data, error } = await resend.emails.send({
-      from: "WraPTrack <onboarding@resend.dev>",
-      to: email,
-      subject: "WraPTrack Account Verification Code",
-      html: "...",
-    });
 
     if (error) {
       console.error("Resend error:", error);
@@ -222,8 +243,8 @@ const resendOtp = async (req, res) => {
     tempUser.otpExpiresAt = otpExpiresAt;
     await tempUser.save();
 
-    await resend.emails.send({
-      from: "WraPTrack <onboarding@resend.dev>",
+   await transporter.sendMail({
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your WraPTrack OTP (Resent)",
       html: `

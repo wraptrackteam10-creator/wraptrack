@@ -19,8 +19,11 @@ const itemSchema = new mongoose.Schema(
       default: "Deposited",
     },
 
-    // Penalty field
+    // 🔴 PENALTY SYSTEM
     penalty: { type: Number, default: 0 },
+
+    // 🔑 prevents double penalty in the same day
+    lastPenaltyAt: { type: Date, default: null },
 
     depositedAt: { type: Date, default: Date.now },
     claimedAt: { type: Date, default: null },
