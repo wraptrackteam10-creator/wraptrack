@@ -146,29 +146,19 @@ const signup = async (req, res) => {
     //   `,
     // });
 
-    await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: "WraPTrack <onboarding@resend.dev>",
       to: email,
       subject: "WraPTrack Account Verification Code",
-      html: `
-        <p>Hello,</p>
-
-        <p>Thank you for registering with <b>WraPTrack</b>.</p>
-
-        <p>Your One-Time Password (OTP) for account verification is:</p>
-
-        <h2 style="letter-spacing: 2px;"><b>${otp}</b></h2>
-
-        <p>This code will expire in <b>10 minutes</b>.</p>
-
-        <p style="color: #666;">
-          Please do not share this code with anyone for security reasons.
-        </p>
-
-        <br />
-        <p>— WraPTrack Team</p>
-      `,
+      html: "...",
     });
+
+    if (error) {
+      console.error("Resend error:", error);
+      return res.status(500).json({ errorMessage: "Failed to send email" });
+    }
+
+    console.log("Email sent:", data);
 
     res.status(200).json({ message: `OTP sent to ${email}. Please verify to complete signup.` });
 
@@ -232,11 +222,15 @@ const resendOtp = async (req, res) => {
     tempUser.otpExpiresAt = otpExpiresAt;
     await tempUser.save();
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+    await resend.emails.send({
+      from: "WraPTrack <onboarding@resend.dev>",
       to: email,
       subject: "Your WraPTrack OTP (Resent)",
-      html: `Your new OTP is <h2><b>${newOtp}</b></h2>. It will expire in 10 minutes.`,
+      html: `
+        <p>Your new OTP is:</p>
+        <h2><b>${newOtp}</b></h2>
+        <p>This code will expire in <b>10 minutes</b>.</p>
+      `,
     });
 
     res.status(200).json({ message: "OTP resent successfully." });
