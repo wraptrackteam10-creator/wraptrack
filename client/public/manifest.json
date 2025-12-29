@@ -1,6 +1,6 @@
 {
   "name": "WraPTrack",
-  "short_name": "WraPTrack PWA",
+  "short_name": "WraPTrack",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

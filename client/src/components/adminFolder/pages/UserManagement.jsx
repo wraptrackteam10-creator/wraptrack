@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import UserFilterPanel from "./UserFilterPanel";
+import { BsSearch } from "react-icons/bs";
 import { CiFilter } from "react-icons/ci";
+import { TiArrowUnsorted } from "react-icons/ti";
+import { FaSortUp, FaSortDown } from "react-icons/fa6";
 
 function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -12,6 +15,12 @@ function UserManagement() {
   const [editedUser, setEditedUser] = useState({});
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [userToArchive, setUserToArchive] = useState(null);
+
+  const [sortField, setSortField] = useState(null); // "date" | "type" | "status"
+  const [sortOrder, setSortOrder] = useState(null); // "asc" | "desc"
+
   // Advanced user filter
   const [userFilterOpen, setUserFilterOpen] = useState(false);
   const [userAdvancedFilters, setUserAdvancedFilters] = useState({
@@ -19,7 +28,11 @@ function UserManagement() {
     email: "",
     types: [],
     statuses: [],
+    archived: false, // NEW: archived toggle
   });
+  const filterButtonRef = useRef(null);
+
+  const [selectedArchivedIds, setSelectedArchivedIds] = useState([]); // NEW: selection for archived users
 
   const API_BASE_URL =
     process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
@@ -35,24 +48,40 @@ function UserManagement() {
 
   /* ---------------- FETCH USERS ---------------- */
   useEffect(() => {
+    let isMounted = true;
+
     const fetchUsers = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/users`);
+        const url = userAdvancedFilters.archived
+          ? `${API_BASE_URL}/api/users?archived=true`
+          : `${API_BASE_URL}/api/users`;
+
+        const res = await fetch(url);
         const data = await res.json();
-        setUsers(data);
+
+        if (isMounted) {
+          setUsers(data);
+        }
       } catch {
         showToast("Failed to load users", "danger");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
+
     fetchUsers();
-  }, [API_BASE_URL]);
+
+    const interval = setInterval(fetchUsers, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [API_BASE_URL, userAdvancedFilters.archived]);
 
   /* ---------------- ACTIONS ---------------- */
   const handleEditClick = (user) => {
     setEditingUserId(user._id);
-    // deep copy so nested edits work properly
     setEditedUser(JSON.parse(JSON.stringify(user)));
   };
 
@@ -66,9 +95,36 @@ function UserManagement() {
     }));
   };
 
+  const toggleSort = (field) => {
+    if (sortField !== field) {
+      setSortField(field);
+      setSortOrder("asc");
+    } else {
+      if (sortOrder === "asc") setSortOrder("desc");
+      else if (sortOrder === "desc") {
+        setSortField(null);
+        setSortOrder(null);
+      } else setSortOrder("asc");
+    }
+  };
+
+  const renderSortIcon = (field) => {
+    if (sortField !== field || !sortOrder) return <TiArrowUnsorted />;
+    return sortOrder === "asc" ? <FaSortUp /> : <FaSortDown />;
+  };
+
+  const openArchiveModal = (id) => {
+    setUserToArchive(id);
+    setShowArchiveModal(true);
+  };
+
   const isValidUsername = (username, type) => {
-    if (type === "visitor") return true;
-    return /^\d{4}-\d{4}$/.test(username);
+    if (type === "student") {
+      return /^\d{4}-\d{4}$/.test(username);
+    }
+    const MAX_LENGTH = 16;
+    const MIN_LENGTH = 8;
+    return typeof username === "string" && username.length <= MAX_LENGTH && username.length >= MIN_LENGTH;
   };
 
   const isValidEmail = (email) => {
@@ -81,7 +137,8 @@ function UserManagement() {
 
     if (!isValidUsername(username, type)) {
       showToast(
-        "Invalid username format. Use 0000-0000 for non-visitors.",
+        `Invalid Login ID format. Use 0000-0000 for student.
+        For non-students, ensure length is between 8 and 16 characters.`,
         "danger"
       );
       return;
@@ -121,26 +178,111 @@ function UserManagement() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this user?")) return;
+  // perform archive (called when modal confirm pressed)
+  const performArchive = async () => {
+    if (!userToArchive) return;
     try {
-      await fetch(`${API_BASE_URL}/api/users/${id}`, { method: "DELETE" });
-      setUsers((prev) => prev.filter((u) => u._id !== id));
-      showToast("User deleted");
+      const res = await fetch(`${API_BASE_URL}/api/users/${userToArchive}/archive`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.error || "Archive failed", "danger");
+        return;
+      }
+
+      const updated = await res.json();
+      // Update single user in list (backend should return updated user)
+      setUsers((prev) => prev.map((u) => (u._id === updated._id ? updated : u)));
+      showToast("User archived");
+    } catch (err) {
+      showToast("Archive failed", "danger");
+    } finally {
+      setShowArchiveModal(false);
+      setUserToArchive(null);
+    }
+  };
+
+  const handleArchive = (id) => {
+    openArchiveModal(id);
+  };
+
+  /* ---------------- UNARCHIVE ---------------- */
+  // unarchive a single user
+  const performUnarchive = async (id) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${id}/unarchive`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.error || "Unarchive failed", "danger");
+        return false;
+      }
+      const updated = await res.json();
+      setUsers((prev) => prev.map((u) => (u._id === updated._id ? updated : u)));
+      return true;
+    } catch (err) {
+      showToast("Unarchive failed", "danger");
+      return false;
+    }
+  };
+
+  // bulk unarchive selected archived users
+  const unarchiveSelected = async () => {
+    if (selectedArchivedIds.length === 0) return;
+    const ids = [...selectedArchivedIds];
+    try {
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`${API_BASE_URL}/api/users/${id}/unarchive`, { method: "PATCH" }).then(async (res) => {
+            if (!res.ok) {
+              const err = await res.json();
+              return { id, ok: false, error: err.error || "Unarchive failed" };
+            }
+            const updated = await res.json();
+            return { id, ok: true, updated };
+          }).catch(() => ({ id, ok: false, error: "Unarchive failed" }))
+        )
+      );
+
+      // apply successful updates
+      setUsers((prev) =>
+        prev.map((u) => {
+          const r = results.find((res) => res.id === u._id);
+          return r && r.ok ? r.updated : u;
+        })
+      );
+
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        showToast(`Unarchived ${ids.length} user(s)`);
+      } else {
+        showToast(`${failed.length} user(s) failed to unarchive`, "danger");
+      }
     } catch {
-      showToast("Delete failed", "danger");
+      showToast("Bulk unarchive failed", "danger");
+    } finally {
+      setSelectedArchivedIds([]);
     }
   };
 
   /* ---------------- FILTERING ---------------- */
-  const visibleUsers = users.filter(
-    (u) =>
-      u.userCredentials.type !== "admin" &&
-      u.userCredentials.type !== "guard"
+  // show archived users only when the advanced filter archived is true
+  const visibleUsers = users.filter((u) =>
+    userAdvancedFilters.archived ? Boolean(u.archivedAt) : !u.archivedAt
   );
 
   // helper to extract date portion (YYYY-MM-DD) from possible date fields
   const isoDateFor = (u) => {
+    // when showing archived users, use archivedAt as primary date
+    if (userAdvancedFilters.archived && u.archivedAt) {
+      try {
+        return new Date(u.archivedAt).toISOString().slice(0, 10);
+      } catch {
+        // fallthrough
+      }
+    }
     const possible = u.createdAt || u.registeredAt || u.updatedAt || "";
     try {
       return new Date(possible).toISOString().slice(0, 10);
@@ -155,7 +297,7 @@ function UserManagement() {
     const fullName = `${u.firstname || ""} ${u.lastname || ""}`.toLowerCase();
     if (search && !fullName.includes(search.toLowerCase())) return false;
 
-    // date filter (matches user's created/registered/updated date)
+    // date filter (matches user's created/registered/updated date or archivedAt when archived mode)
     if (dateFilter) {
       const userDate = isoDateFor(u);
       if (!userDate || userDate !== dateFilter) return false;
@@ -173,15 +315,57 @@ function UserManagement() {
       if (!uemail.includes(email.toLowerCase())) return false;
     }
 
-    if (types.length > 0) {
+    if (types?.length > 0) {
       if (!types.includes(u.userCredentials?.type)) return false;
     }
 
-    if (statuses.length > 0) {
+    if (statuses?.length > 0) {
       if (!statuses.includes(u.userCredentials?.status)) return false;
     }
     return true;
   });
+
+  /* ---------------- SORTING ---------------- */
+  const typeOrderAsc = ["student", "faculty", "visitor", "guard", "admin"];
+  const typeOrderDesc = [...typeOrderAsc].reverse();
+
+  const statusOrderAsc = ["Active", "Inactive"];
+  const statusOrderDesc = [...statusOrderAsc].reverse();
+
+  let sortedUsers = [...filteredUsers];
+
+  if (sortField && sortOrder) {
+    sortedUsers.sort((a, b) => {
+      if (sortField === "date") {
+        // if viewing archived users, sort by archivedAt, else by created/registered/updated
+        const getDateVal = (obj) => {
+          if (userAdvancedFilters.archived && obj.archivedAt) return new Date(obj.archivedAt);
+          return new Date(obj.createdAt || obj.registeredAt || obj.updatedAt || 0);
+        };
+        const A = getDateVal(a);
+        const B = getDateVal(b);
+        return sortOrder === "asc" ? A - B : B - A;
+      }
+
+      if (sortField === "type") {
+        const order = sortOrder === "asc" ? typeOrderAsc : typeOrderDesc;
+        return (
+          order.indexOf(a.userCredentials.type) -
+          order.indexOf(b.userCredentials.type)
+        );
+      }
+
+      if (sortField === "status") {
+        const order = sortOrder === "asc" ? statusOrderAsc : statusOrderDesc;
+        return (
+          order.indexOf(a.userCredentials.status) -
+          order.indexOf(b.userCredentials.status)
+        );
+      }
+
+      return 0;
+    });
+  }
 
   /* ---------------- TIME AGO ---------------- */
   const timeAgo = (date) => {
@@ -192,10 +376,14 @@ function UserManagement() {
     return `${Math.floor(diff / 86400)}d ago`;
   };
 
-  const getLastUpdated = () =>
-    visibleUsers.length
-      ? Math.max(...visibleUsers.map((u) => new Date(u.updatedAt)))
-      : new Date();
+  const getLastUpdated = () => {
+    if (!visibleUsers.length) return new Date();
+    // when viewing archived users, consider archivedAt for "Updated" indicator
+    if (userAdvancedFilters.archived) {
+      return new Date(Math.max(...visibleUsers.map((u) => new Date(u.archivedAt || 0))));
+    }
+    return new Date(Math.max(...visibleUsers.map((u) => new Date(u.updatedAt || u.createdAt || 0))));
+  };
 
   /* ---------------- User filter handlers ---------------- */
   const handleApplyUserFilters = (filters) => {
@@ -204,7 +392,10 @@ function UserManagement() {
       email: filters.email || "",
       types: filters.types || [],
       statuses: filters.statuses || [],
+      archived: Boolean(filters.archived),
     });
+    // When switching to archived view, clear any selected archived IDs
+    setSelectedArchivedIds([]);
     showToast("User filters applied", "success");
   };
 
@@ -214,7 +405,9 @@ function UserManagement() {
       email: "",
       types: [],
       statuses: [],
+      archived: false,
     });
+    setSelectedArchivedIds([]);
     showToast("User filters cleared", "success");
   };
 
@@ -223,7 +416,11 @@ function UserManagement() {
     setDateFilter("");
     handleClearUserFilters();
     setUserFilterOpen(false);
-    showToast("All filters cleared", "success");
+
+    setSortField(null);
+    setSortOrder(null);
+
+    showToast("All filters & sorting cleared", "success");
   };
 
   const activeUserFilterCount = (() => {
@@ -238,6 +435,8 @@ function UserManagement() {
     if (userAdvancedFilters.statuses?.length)
       c += userAdvancedFilters.statuses.length;
 
+    if (userAdvancedFilters.archived) c++;
+
     return c;
   })();
 
@@ -251,12 +450,39 @@ function UserManagement() {
     return `${day}/${month}/${year}`;
   };
 
+  /* ---------------- Selection for archived users ---------------- */
+  const toggleSelectArchived = (id) => {
+    setSelectedArchivedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllVisible = () => {
+    const ids = sortedUsers.map((u) => u._id);
+    setSelectedArchivedIds(ids);
+  };
+
+  const clearAllSelected = () => setSelectedArchivedIds([]);
+
+  const toggleSelectAll = () => {
+    const ids = sortedUsers.map((u) => u._id);
+    if (ids.length === 0) return;
+    const allSelected = ids.every((id) => selectedArchivedIds.includes(id));
+    if (allSelected) clearAllSelected();
+    else setSelectedArchivedIds(ids);
+  };
+
+  const isAllSelected = () => {
+    const ids = sortedUsers.map((u) => u._id);
+    return ids.length > 0 && ids.every((id) => selectedArchivedIds.includes(id));
+  };
+
   return (
     <div className="container-fluid p-2">
       {/* PAGE HEADER */}
       <div
         className="d-flex justify-content-between mb-2 p-3 rounded"
-        style={{ background: "#FFFFFF", border: "1px solid #D4C9BE" }}
+        style={{ background: "#FFF", border: "1px solid #D4C9BE" }}
       >
         <div>
           <h4 className="fw-semibold mb-1">User Account Management</h4>
@@ -269,8 +495,8 @@ function UserManagement() {
           {/* Date filter */}
           <input
             type="date"
-            className="form-control mt-2"
-            style={{ maxWidth: 170, height: "37px",  }}
+            className="form-control"
+            style={{ maxWidth: 150, height: "37px", border: "1px solid #D4C9BE"}}
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
             aria-label="Filter by date"
@@ -279,14 +505,15 @@ function UserManagement() {
 
           {/* Advanced filters button */}
           <button
-            className="form-control border btn mt-2 d-flex align-items-center"
+            ref={filterButtonRef}
+            className="btn d-inline-flex align-items-center"
             onClick={() => setUserFilterOpen((v) => !v)}
             title="Advanced filters"
             style={{
+              border: userFilterOpen ? "2px solid #123458" : "1px solid #D4C9BE",
               background: activeUserFilterCount > 0 ? "#123458" : "#fff",
               color: activeUserFilterCount > 0 ? "#F1EFEC" : "#030303",
               height: "37px",
-              width: "auto",
               padding: "0 10px",
               whiteSpace: "nowrap",
             }}
@@ -298,30 +525,62 @@ function UserManagement() {
 
           {/* Clear filters */}
           <button
-            className="form-control btn border mt-2"
+            className="form-control btn"
             onClick={handleClearAll}
             title="Clear filters/search"
-            style={{ height: "37px", width: "100px" }}
+            style={{ height: "37px", width: "62px", border: "1px solid #D4C9BE" }}
           >
             Clear
           </button>
 
           {/* Search */}
-          <input
-            className="form-control mt-2"
-            placeholder="Search user"
-            style={{ maxWidth: 240, height: "37px", }}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search users by name"
-          />
+          <div style={{ position: "relative", width: 240}}>
+            <BsSearch
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "10px",
+                transform: "translateY(-50%)",
+                color: "#6b6b6b",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              className="form-control"
+              placeholder="Search user"
+              style={{ maxWidth: 240, border: "1px solid #D4C9BE", height: "37px", paddingLeft: "32px",}}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search users by name"
+            />
+          </div>
         </div>
       </div>
 
       {/* TABLE CARD */}
       <div className="rounded" style={{ background: "#fff", border: "1px solid #D4C9BE" }}>
-        <div className="px-3 py-2 fw-semibold border-bottom">
-          User Accounts Overview
+        <div className="px-3 py-2 fw-semibold border-bottom d-flex justify-content-between align-items-center">
+          <div>User Accounts Overview</div>
+
+          {/* When viewing archived users, show Unarchive selected button */}
+          <div className="d-flex gap-2 align-items-center">
+            {userAdvancedFilters.archived && (
+              <>
+                <div className="small text-muted me-2">
+                  {selectedArchivedIds.length} selected
+                </div>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: "#123458", color: "#fff" }}
+                  onClick={unarchiveSelected}
+                  disabled={selectedArchivedIds.length === 0}
+                  title="Unarchive selected users"
+                >
+                  Unarchive selected
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="d-flex flex-column flex-grow-1">
@@ -330,29 +589,53 @@ function UserManagement() {
           ) : (
             <table className="table mb-0 align-middle">
               <colgroup>
-                <col style={{ width: "4%" }} />   {/* # */}
-                <col style={{ width: "24%" }} />  {/* Full Name */}
+                <col style={{ width: "4%" }} />   {/* # OR checkbox */}
+                <col style={{ width: "20%" }} />  {/* Full Name */}
                 <col style={{ width: "12%" }} />  {/* Username */}
                 <col style={{ width: "24%" }} />  {/* Email */}
-                <col style={{ width: "8%" }} />   {/* Date */}
+                <col style={{ width: "12%" }} />   {/* Date */}
                 <col style={{ width: "8%" }} />   {/* Type */}  
                 <col style={{ width: "8%" }} />   {/* Status */}
                 <col style={{ width: "20%" }} />  {/* Actions */}
               </colgroup>
               <thead>
                 <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>#</th>
+                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
+                    {userAdvancedFilters.archived ? (
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected()}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all displayed archived users"
+                      />
+                    ) : (
+                      "#"
+                    )}
+                  </th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Full Name</th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Username</th>
+                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Login ID</th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Email</th>
-                  <th title="account creation date" style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Date</th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Type</th>
+                  <th
+                    onClick={() => toggleSort("date")}
+                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                  >
+                    {userAdvancedFilters.archived ? "Archived Date" : "Date"} {renderSortIcon("createdAt")}
+                  </th>
+                  <th
+                    onClick={() => toggleSort("type")}
+                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                  >
+                    Type {renderSortIcon("type")}
+                  </th>
+
                   <th
                     className="text-center"
-                    style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                    onClick={() => toggleSort("status")}
+                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
                   >
-                    Status
+                    Status {renderSortIcon("status")}
                   </th>
+
                   <th
                     className="text-center"
                     style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
@@ -362,10 +645,21 @@ function UserManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((u, i) => (
+                {sortedUsers.map((u, i) => (
                   <tr key={u._id}>
-                    <td>{i + 1}</td>
-                    
+                    <td>
+                      {userAdvancedFilters.archived ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedArchivedIds.includes(u._id)}
+                          onChange={() => toggleSelectArchived(u._id)}
+                          aria-label={`Select archived user ${u.firstname} ${u.lastname}`}
+                        />
+                      ) : (
+                        i + 1
+                      )}
+                    </td>
+
                     {/* FULL NAME */}
                     <td>
                       {editingUserId === u._id ? (
@@ -431,12 +725,18 @@ function UserManagement() {
 
                     {/* DATE */}
                     <td>
-                      <small className="text-muted">{formatDate(u.createdAt || u.registeredAt || u.updatedAt)}</small>
+                      <small className="text-muted">
+                        {formatDate(
+                          userAdvancedFilters.archived && u.archivedAt
+                            ? u.archivedAt
+                            : u.createdAt || u.registeredAt || u.updatedAt
+                        )}
+                      </small>
                     </td>
 
                     {/* TYPE */}
                     <td>
-                      {editingUserId === u._id ? (
+                      {editingUserId === u._id && u.userCredentials.type !== "admin" && u.userCredentials.type !== "guard" ? (
                         <select
                           className="form-select form-select-sm"
                           value={editedUser.userCredentials.type}
@@ -450,7 +750,15 @@ function UserManagement() {
                         </select>
                       ) : (
                         <span className="px-2 py-1 rounded small border">
-                          {u.userCredentials.type}
+                          {u.userCredentials.type === "student"
+                            ? "Student"
+                            : u.userCredentials.type === "faculty"
+                            ? "Faculty"
+                            : u.userCredentials.type === "guard"
+                            ? "Guard"
+                            : u.userCredentials.type === "admin"
+                            ? "Admin"
+                            : "Visitor"}
                         </span>
                       )}
                     </td>
@@ -485,7 +793,21 @@ function UserManagement() {
 
                     {/* ACTIONS */}
                     <td className="text-center">
-                      {editingUserId === u._id ? (
+                      {userAdvancedFilters.archived ? (
+                        // Archived view: show Unarchive button for each row
+                        <div className="d-flex justify-content-center gap-2">
+                          <button
+                            className="btn btn-sm"
+                            style={{
+                              border: "1px solid #123458",
+                              color: "#123458",
+                            }}
+                            onClick={() => performUnarchive(u._id)}
+                          >
+                            Unarchive
+                          </button>
+                        </div>
+                      ) : editingUserId === u._id ? (
                         <>
                           <button
                             className="btn btn-sm me-2"
@@ -522,7 +844,8 @@ function UserManagement() {
                               border: "1px solid #F08080",
                               color: "#F08080",
                             }}
-                            onClick={() => handleDelete(u._id)}
+                            onClick={() => handleArchive(u._id)}
+                            disabled={u.userCredentials.type === "admin"}
                           >
                             Archive
                           </button>
@@ -542,9 +865,32 @@ function UserManagement() {
         </div>
       </div>
 
+      {/* Archive confirmation modal */}
+      {showArchiveModal && (
+        <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,.5)" }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5>Confirm Archive</h5>
+              </div>
+              <div className="modal-body">Are you sure you want to archive this user?</div>
+              <div className="modal-footer">
+                <button className="btn border" onClick={() => { setShowArchiveModal(false); setUserToArchive(null); }}>
+                  Cancel
+                </button>
+                <button className="btn" style={{ backgroundColor: "#123458", color: "#fff" }} onClick={performArchive}>
+                  Yes, Archive
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* User filter panel portal */}
       <UserFilterPanel
         show={userFilterOpen}
+        anchorRef={filterButtonRef}
         onClose={() => setUserFilterOpen(false)}
         onApply={(f) => handleApplyUserFilters(f)}
         onClear={() => {

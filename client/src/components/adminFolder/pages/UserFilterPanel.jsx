@@ -7,14 +7,17 @@ export default function UserFilterPanel({
   onApply,
   onClear,
   initialFilters = {},
+  anchorRef,
 }) {
-  const userTypeOptions = ["student", "faculty", "visitor"];
+  const userTypeOptions = ["student", "faculty", "visitor", "guard", "admin"];
   const statusOptions = ["Active", "Inactive"];
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [types, setTypes] = useState([]);
   const [statuses, setStatuses] = useState([]);
+  const [archived, setArchived] = useState(false); // NEW: archived toggle
+  const [position, setPosition] = useState({ left: 0, top: 0 });
 
   const panelRef = useRef(null);
 
@@ -23,7 +26,22 @@ export default function UserFilterPanel({
     setEmail(initialFilters.email || "");
     setTypes(initialFilters.types || []);
     setStatuses(initialFilters.statuses || []);
+    setArchived(Boolean(initialFilters.archived)); // initialize archived toggle
   }, [initialFilters]);
+
+  // POSITION UNDER BUTTON
+  useEffect(() => {
+    if (!show || !anchorRef?.current) return;
+
+    const rect = anchorRef.current.getBoundingClientRect();
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+
+    setPosition({
+      left: rect.left + scrollX,
+      top: rect.bottom + scrollY + 8,
+    });
+  }, [show, anchorRef]);
 
   const toggleType = (type) => {
     setTypes((prev) =>
@@ -42,15 +60,15 @@ export default function UserFilterPanel({
   return createPortal(
     <div
       ref={panelRef}
-      className="position-fixed p-3 rounded"
+      className="position-absolute p-3 rounded"
       style={{
-        top: 120,
-        right: 20,
+        left: position.left,
+        top: position.top,
         zIndex: 3000,
         width: 320,
         background: "#FFFFFF",
         border: "1px solid #030303",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
       }}
       role="dialog"
       aria-modal="true"
@@ -58,15 +76,22 @@ export default function UserFilterPanel({
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-3">
         <strong>Advanced Filter</strong>
-        <button className="btn btn-sm" onClick={onClose} style={{
+        <button
+          className="btn btn-sm"
+          onClick={onClose}
+          style={{
             border: "1px solid #D4C9BE",
             background: "#F1EFEC",
-          }}>✕</button>
+          }}
+          aria-label="Close filters"
+        >
+          ✕
+        </button>
       </div>
 
-      {/* Username */}
+      {/* Login ID */}
       <div className="mb-2">
-        <label className="small">Username</label>
+        <label className="small">Login ID</label>
         <input
           className="form-control form-control-sm"
           value={username}
@@ -84,71 +109,87 @@ export default function UserFilterPanel({
         />
       </div>
 
-      {/* User Type (CHECKBOX UI) */}
-      <div className="mb-3">
-        <label className="form-label mb-1" style={{ fontSize: ".8rem" }}>
-          User Type
-        </label>
-        <div
-          style={{
-            maxHeight: 110,
-            overflowY: "auto",
-            border: "1px solid #D4C9BE",
-            padding: 8,
-            borderRadius: 4,
-          }}
-        >
-          {userTypeOptions.map((type) => (
-            <div className="form-check" key={type}>
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id={`type-${type}`}
-                checked={types.includes(type)}
-                onChange={() => toggleType(type)}
-              />
-              <label
-                className="form-check-label"
-                htmlFor={`type-${type}`}
-                style={{ fontSize: ".85rem" }}
-              >
-                {type}
-              </label>
-            </div>
-          ))}
+      <div className="d-flex justify-content-between gap-2">
+        {/* User Type */}
+        <div className="mb-3 flex-grow-1">
+          <label className="form-label mb-1" style={{ fontSize: ".8rem" }}>
+            User Type
+          </label>
+          <div
+            style={{
+              maxHeight: 110,
+              overflowY: "auto",
+              border: "1px solid #D4C9BE",
+              padding: 8,
+              borderRadius: 4,
+            }}
+          >
+            {userTypeOptions.map((type) => (
+              <div className="form-check" key={type}>
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={types.includes(type)}
+                  onChange={() => toggleType(type)}
+                />
+                <label className="form-check-label" style={{ fontSize: ".85rem" }}>
+                  {type}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Status */}
+        <div className="mb-3 flex-grow-1">
+          <label className="form-label mb-1" style={{ fontSize: ".8rem" }}>
+            Status
+          </label>
+          <div
+            style={{
+              border: "1px solid #D4C9BE",
+              padding: 8,
+              borderRadius: 4,
+            }}
+          >
+            {statusOptions.map((status) => (
+              <div className="form-check" key={status}>
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={statuses.includes(status)}
+                  onChange={() => toggleStatus(status)}
+                />
+                <label className="form-check-label" style={{ fontSize: ".85rem" }}>
+                  {status}
+                </label>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Status (CHECKBOX UI) */}
-      <div className="mb-3">
-        <label className="form-label mb-1" style={{ fontSize: ".8rem" }}>
-          Status
-        </label>
-        <div
-          style={{
-            border: "1px solid #D4C9BE",
-            padding: 8,
-            borderRadius: 4,
-          }}
-        >
-          {statusOptions.map((status) => (
-            <div className="form-check" key={status}>
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id={`status-${status}`}
-                checked={statuses.includes(status)}
-                onChange={() => toggleStatus(status)}
-              />
-              <label
-                className="form-check-label"
-                htmlFor={`status-${status}`}
-                style={{ fontSize: ".85rem" }}
-              >
-                {status}
-              </label>
-            </div>
-          ))}
+      {/* Archived toggle */}
+      <div
+        className="d-flex justify-content-between align-items-center mt-2 mb-3 px-2 py-2 rounded"
+        style={{ border: "1px solid #D4C9BE", background: "#F9F8F6" }}
+      >
+        <div>
+          <div style={{ fontSize: ".85rem", fontWeight: 500 }}>
+            Archived users
+          </div>
+          <small style={{ fontSize: ".75rem", color: "#6b6b6b" }}>
+            Show only archived accounts 
+          </small>
+        </div>
+        <div className="form-check form-switch m-0">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            checked={archived}
+            onChange={(e) => setArchived(e.target.checked)}
+            aria-label="Show archived users only"
+          />
         </div>
       </div>
 
@@ -161,6 +202,7 @@ export default function UserFilterPanel({
             setEmail("");
             setTypes([]);
             setStatuses([]);
+            setArchived(false);
             onClear?.();
             onClose?.();
           }}
@@ -171,12 +213,7 @@ export default function UserFilterPanel({
           className="btn btn-sm"
           style={{ background: "#123458", color: "#F1EFEC" }}
           onClick={() => {
-            onApply?.({
-              username,
-              email,
-              types,
-              statuses,
-            });
+            onApply?.({ username, email, types, statuses, archived });
             onClose?.();
           }}
         >

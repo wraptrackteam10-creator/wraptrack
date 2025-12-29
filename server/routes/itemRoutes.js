@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const {
-  uploadItem, getItems, getItemPhoto, updateItemAction,
+  uploadItem, getItems, getItemPhoto, updateItemAction, unarchiveItem,
   updateItemStatus, getItemSummary, updateItem, deleteItem,
 } = require("../controllers/itemController");
 
@@ -16,6 +16,7 @@ router.post("/upload", upload.single("photo"), uploadItem); // Create
 router.get("/items", getItems); // Read
 router.get("/items/:id/photo", getItemPhoto);
 router.patch("/items/:id/action", updateItemAction); // Update
+router.patch("/items/:id/unarchive", unarchiveItem); // Unarchive
 router.put("/items/:id/status", updateItemStatus); 
 
 // Routes CRUD for guard

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export default function FilterPanel({
@@ -27,6 +27,7 @@ export default function FilterPanel({
   const [penaltyMode, setPenaltyMode] = useState(initialFilters.penaltyMode || "any");
   const [penaltyMin, setPenaltyMin] = useState(initialFilters.penaltyMin ?? "");
   const [penaltyMax, setPenaltyMax] = useState(initialFilters.penaltyMax ?? "");
+  const [archived, setArchived] = useState(Boolean(initialFilters.archived || false)); // NEW
 
   const panelRef = useRef(null);
   const [position, setPosition] = useState({ left: 0, top: 0, transformOrigin: "top left" });
@@ -39,6 +40,7 @@ export default function FilterPanel({
     setPenaltyMode(initialFilters.penaltyMode || "any");
     setPenaltyMin(initialFilters.penaltyMin ?? "");
     setPenaltyMax(initialFilters.penaltyMax ?? "");
+    setArchived(Boolean(initialFilters.archived || false));
   }, [initialFilters]);
 
   // compute position when shown, on resize, scroll
@@ -108,20 +110,20 @@ export default function FilterPanel({
   };
 
   useEffect(() => {
-  if (penaltyMode !== "penalty") {
-    setPenaltyMin("");
-    setPenaltyMax("");
-  }
-}, [penaltyMode]);
+    if (penaltyMode !== "penalty") {
+      setPenaltyMin("");
+      setPenaltyMax("");
+    }
+  }, [penaltyMode]);
 
   const handleApply = () => {
     onApply?.({
-      
       name: name.trim(),
       descriptions,
       penaltyMode,
       penaltyMin: penaltyMin === "" ? "" : Number(penaltyMin),
       penaltyMax: penaltyMax === "" ? "" : Number(penaltyMax),
+      archived: Boolean(archived), // NEW
     });
     onClose?.();
   };
@@ -132,6 +134,7 @@ export default function FilterPanel({
     setPenaltyMode("any");
     setPenaltyMin("");
     setPenaltyMax("");
+    setArchived(false);
     onClear?.();
     onClose?.();
   };
@@ -147,7 +150,7 @@ export default function FilterPanel({
         width: PANEL_WIDTH,
         background: "#FFFFFF",
         border: "1px solid #030303",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
         color: "#030303",
         left: position.left,
         top: position.top,
@@ -279,7 +282,30 @@ export default function FilterPanel({
             />
           </div>
         )}
+      </div>
 
+      {/* Archived toggle */}
+      <div
+        className="d-flex justify-content-between align-items-center mt-2 mb-3 px-2 py-2 rounded"
+        style={{ border: "1px solid #D4C9BE", background: "#F9F8F6" }}
+      >
+        <div>
+          <div style={{ fontSize: ".85rem", fontWeight: 500 }}>
+            Archived items
+          </div>
+          <small style={{ fontSize: ".75rem", color: "#6b6b6b" }}>
+            Show only archived items (date filter will use archived date)
+          </small>
+        </div>
+        <div className="form-check form-switch m-0">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            checked={archived}
+            onChange={(e) => setArchived(e.target.checked)}
+            aria-label="Show archived items only"
+          />
+        </div>
       </div>
 
       {/* Actions */}

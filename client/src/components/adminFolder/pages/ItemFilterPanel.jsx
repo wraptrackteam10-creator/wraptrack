@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { MdArrowRightAlt } from "react-icons/md";
 import { createPortal } from "react-dom";
 
 /**
@@ -8,7 +9,7 @@ import { createPortal } from "react-dom";
  *  - onClose: () => void
  *  - onApply: (filters) => void
  *  - onClear: () => void
- *  - initialFilters: { name, descriptions, penaltyMode, penaltyMin, penaltyMax, dateFrom, dateTo }
+ *  - initialFilters: { name, descriptions, penaltyMode, penaltyMin, penaltyMax, dateFrom, dateTo, archived }
  *  - anchorRef: ref of element to anchor the panel to (optional)
  */
 export default function ItemFilterPanel({
@@ -39,6 +40,7 @@ export default function ItemFilterPanel({
   const [penaltyMax, setPenaltyMax] = useState(initialFilters.penaltyMax ?? "");
   const [dateFrom, setDateFrom] = useState(initialFilters.dateFrom || "");
   const [dateTo, setDateTo] = useState(initialFilters.dateTo || "");
+  const [archived, setArchived] = useState(Boolean(initialFilters.archived || false)); // NEW: archived toggle
 
   const panelRef = useRef(null);
   const [position, setPosition] = useState({ left: 0, top: 0, transformOrigin: "top left" });
@@ -53,6 +55,7 @@ export default function ItemFilterPanel({
     setPenaltyMax(initialFilters.penaltyMax ?? "");
     setDateFrom(initialFilters.dateFrom || "");
     setDateTo(initialFilters.dateTo || "");
+    setArchived(Boolean(initialFilters.archived || false));
   }, [initialFilters]);
 
   // position logic similar to other FilterPanel (anchors to anchorRef if provided)
@@ -112,7 +115,14 @@ export default function ItemFilterPanel({
   const toggleDescription = (option) => {
     setDescriptions((prev) => (prev.includes(option) ? prev.filter((d) => d !== option) : [...prev, option]));
   };
-
+  
+  useEffect(() => {
+    if (penaltyMode !== "penalty") {
+      setPenaltyMin("");
+      setPenaltyMax("");
+    }
+  }, [penaltyMode]);
+  
   const handleApply = () => {
     onApply?.({
       name: name.trim(),
@@ -122,6 +132,7 @@ export default function ItemFilterPanel({
       penaltyMax: penaltyMax === "" ? "" : Number(penaltyMax),
       dateFrom: dateFrom || "",
       dateTo: dateTo || "",
+      archived: Boolean(archived),
     });
     onClose?.();
   };
@@ -134,6 +145,7 @@ export default function ItemFilterPanel({
     setPenaltyMax("");
     setDateFrom("");
     setDateTo("");
+    setArchived(false);
     onClear?.();
     onClose?.();
   };
@@ -149,7 +161,7 @@ export default function ItemFilterPanel({
         width: PANEL_WIDTH,
         background: "#FFFFFF",
         border: "1px solid #030303",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
         color: "#030303",
         left: position.left,
         top: position.top,
@@ -243,26 +255,28 @@ export default function ItemFilterPanel({
           ))}
         </div>
 
-        <div className="d-flex gap-2 mt-2">
-          <input
-            type="number"
-            className="form-control form-control-sm"
-            placeholder="Min"
-            value={penaltyMin}
-            onChange={(e) => setPenaltyMin(e.target.value)}
-            min={0}
-            style={{ maxWidth: 100, border: "1px solid #D4C9BE" }}
-          />
-          <input
-            type="number"
-            className="form-control form-control-sm"
-            placeholder="Max"
-            value={penaltyMax}
-            onChange={(e) => setPenaltyMax(e.target.value)}
-            min={0}
-            style={{ maxWidth: 100, border: "1px solid #D4C9BE" }}
-          />
-        </div>
+        {penaltyMode !== "no-penalty" && (
+          <div className="d-flex gap-2 mt-2">
+            <input
+              type="number"
+              className="form-control form-control-sm"
+              placeholder="Min"
+              value={penaltyMin}
+              onChange={(e) => setPenaltyMin(e.target.value)}
+              min={0}
+              style={{ maxWidth: 100, border: "1px solid #D4C9BE" }}
+            />
+            <input
+              type="number"
+              className="form-control form-control-sm"
+              placeholder="Max"
+              value={penaltyMax}
+              onChange={(e) => setPenaltyMax(e.target.value)}
+              min={0}
+              style={{ maxWidth: 100, border: "1px solid #D4C9BE" }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Date range */}
@@ -276,14 +290,39 @@ export default function ItemFilterPanel({
             className="form-control form-control-sm"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            style={{ border: "1px solid #D4C9BE" }}
+            style={{ border: "1px solid #D4C9BE", minWidth: 125}}
           />
+          <div><MdArrowRightAlt /></div>
           <input
             type="date"
             className="form-control form-control-sm"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            style={{ border: "1px solid #D4C9BE" }}
+            style={{ border: "1px solid #D4C9BE", minWidth: 125 }}
+          />
+        </div>
+      </div>
+
+      {/* Archived toggle */}
+      <div
+        className="d-flex justify-content-between align-items-center mt-2 mb-3 px-2 py-2 rounded"
+        style={{ border: "1px solid #D4C9BE", background: "#F9F8F6" }}
+      >
+        <div>
+          <div style={{ fontSize: ".85rem", fontWeight: 500 }}>
+            Archived items
+          </div>
+          <small style={{ fontSize: ".75rem", color: "#6b6b6b" }}>
+            Show only archived items 
+          </small>
+        </div>
+        <div className="form-check form-switch m-0">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            checked={archived}
+            onChange={(e) => setArchived(e.target.checked)}
+            aria-label="Show archived items only"
           />
         </div>
       </div>

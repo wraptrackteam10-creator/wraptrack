@@ -5,7 +5,8 @@ const connectDB = require("./config/db");
 const cron = require("node-cron");
 
 const { 
-  autoUpdateUnclaimedItems, 
+  autoUpdateUnclaimedItems,
+  autoApplyDailyPenalty, 
   autoArchiveUnclaimedItems 
 } = require("./controllers/itemController");
 
@@ -50,16 +51,6 @@ app.use("/api", settingsRoutes);
 
 // ✅ Auto-update Deposited / Pending Verification → Unclaimed
 // Runs every 1 minute
-
-// cron.schedule("* * * * *", async () => {
-//   try {
-//     console.log("⏱️ Running 1-min auto-update for Unclaimed items...");
-//     await autoUpdateUnclaimedItems();
-//   } catch (err) {
-//     console.error("❌ Cron auto-update failed:", err.message);
-//   }
-// }, { timezone: "Asia/Manila" });
-
 const { cleanupExpiredTempSignups } = require("./controllers/authController");
 
 cron.schedule("* * * * *", async () => {
@@ -95,11 +86,6 @@ cron.schedule("0 23 * * *", async () => {
     console.error("❌ Auto-archive failed:", err.message);
   }
 }, { timezone: "Asia/Manila" });
-
-// Runs every 1 minute
-// cron.schedule("* * * * *", async () => {
-//   await cleanupExpiredTempSignups();
-// }, { timezone: "Asia/Manila" });
 
 /* ----------------------------------------- */
 

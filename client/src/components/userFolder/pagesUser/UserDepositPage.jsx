@@ -140,7 +140,7 @@ function UserDepositPage() {
 
     try {
       setDescription("⏳ Detecting...");
-      const res = await fetch("http://192.168.1.11:5000/predict", {
+      const res = await fetch("http://192.168.1.4:5000/predict", {
         method: "POST",
         body: formData,
       });

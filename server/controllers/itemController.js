@@ -206,6 +206,7 @@ const autoArchiveUnclaimedItems = async () => {
 
     for (const item of itemsToArchive) {
       item.action = "Archive";
+      item.archivedAt = new Date();
       await item.save();
 
       await Log.create({
@@ -238,29 +239,43 @@ const updateItemAction = async (req, res) => {
     const { id } = req.params;
     const { action } = req.body;
 
-    const allowedActions = ["Deposited", "Archive"];
-    if (!allowedActions.includes(action))
+    if (action !== "Archive")
       return res.status(400).json({ error: "Invalid action value." });
 
     const item = await Item.findById(id);
     if (!item) return res.status(404).json({ error: "Item not found" });
 
-    item.action = action;
+    item.action = "Archive";
+    item.archivedAt = new Date();
+    item.archivedBy = req.user?._id || null;
+
     await item.save();
 
     await Log.create({
       userId: item.userId,
       itemId: item._id,
-      action,
+      action: "Archived",
       status: item.status,
       description: item.description,
       photoUrl: item.photoUrl,
     });
 
-    res.json({ message: "Item action updated.", item });
+    res.json(item);
   } catch (error) {
-    res.status(500).json({ error: "Failed to update action" });
+    res.status(500).json({ error: "Failed to archive item" });
   }
+};
+
+const unarchiveItem = async (req, res) => {
+  const item = await Item.findById(req.params.id);
+  if (!item) return res.status(404).json({ error: "Item not found" });
+
+  item.archivedAt = null;
+  item.archivedBy = null;
+  item.action = "Deposited";
+
+  await item.save();
+  res.json(item);
 };
 
 // ===============================================================
@@ -424,6 +439,7 @@ module.exports = {
   getItems,
   getItemPhoto,
   updateItemAction,
+  unarchiveItem,
   updateItemStatus,
   autoUpdateUnclaimedItems,
   autoApplyDailyPenalty,

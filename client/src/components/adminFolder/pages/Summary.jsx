@@ -58,7 +58,7 @@ function Summary() {
   const todayUnclaimed = items.filter((i) => isToday(i.unclaimedAt)).length;
 
   // Penalized items: using penalty field = 0 for now
-  const todayPenalized = items.filter((i) => i.penalty !== 0 && isToday(i.updatedAt)).length;
+  const todayPenalized = items.filter((i) => i.penalty !== 0 && isToday(i.lastPenaltyAt)).length;
 
   // Users filtering
   const visibleUsers = users.filter(

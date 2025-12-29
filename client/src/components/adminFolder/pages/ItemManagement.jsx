@@ -3,6 +3,7 @@ import { TiArrowUnsorted } from "react-icons/ti";
 import { FaSortUp } from "react-icons/fa6";
 import { FaSortDown } from "react-icons/fa6";
 import { CiFilter } from "react-icons/ci";
+import { BsSearch } from "react-icons/bs";
 import "bootstrap/dist/css/bootstrap.min.css";
 import ItemFilterPanel from "./ItemFilterPanel";
 
@@ -16,8 +17,10 @@ function ItemManagement() {
   const [editedItem, setEditedItem] = useState({});
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteItemId, setDeleteItemId] = useState(null);
+
+  // ARCHIVE modal state (replaces delete)
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveItemId, setArchiveItemId] = useState(null);
 
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [verifyItemId, setVerifyItemId] = useState(null);
@@ -32,9 +35,13 @@ function ItemManagement() {
     penaltyMax: "",
     dateFrom: "",
     dateTo: "",
+    archived: false, // NEW: archived toggle
   });
 
   const filterButtonRef = useRef(null);
+
+  // selection state for archived items
+  const [selectedArchivedIds, setSelectedArchivedIds] = useState([]);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
 
@@ -58,14 +65,24 @@ function ItemManagement() {
       }
     };
     fetchItems();
+    const interval = setInterval(fetchItems, 5000); // every 5 seconds
+
+    return () => clearInterval(interval);
   }, [API_BASE_URL]);
 
-  /* ---------- SORT / FILTER ---------- */
-  let filteredItems = items.filter((i) => {
+  /* ---------- FILTER / VISIBLE SET ---------- */
+  // When archived mode is true, show only archived items (archivedAt truthy).
+  // Otherwise show non-archived items.
+  const visibleItems = items.filter((i) =>
+    advancedFilters.archived ? Boolean(i.archivedAt) : !i.archivedAt
+  );
+
+  // Base filtered list (search + status)
+  let filteredItems = visibleItems.filter((i) => {
     const matchSearch =
       !search ||
-      i.description?.toLowerCase().includes(search.toLowerCase()) ||
-      `${i.firstname} ${i.lastname}`.toLowerCase().includes(search.toLowerCase());
+      (i.description && i.description.toLowerCase().includes(search.toLowerCase())) ||
+      `${i.firstname || ""} ${i.lastname || ""}`.toLowerCase().includes(search.toLowerCase());
 
     const matchStatus = statusFilter === "All" || i.status === statusFilter;
 
@@ -84,7 +101,7 @@ function ItemManagement() {
   } = advancedFilters;
 
   filteredItems = filteredItems.filter((i) => {
-    // name (owner)
+    // owner name
     if (name) {
       const owner = `${i.firstname || ""} ${i.lastname || ""}`.toLowerCase();
       if (!owner.includes(name.toLowerCase())) return false;
@@ -110,8 +127,13 @@ function ItemManagement() {
       if (pp > Number(penaltyMax)) return false;
     }
 
-    // date range (compare YYYY-MM-DD)
-    const itemDate = i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : "";
+    // date range (compare YYYY-MM-DD). When archived view, use archivedAt as primary date.
+    const itemDate = advancedFilters.archived && i.archivedAt
+      ? new Date(i.archivedAt).toISOString().slice(0, 10)
+      : i.createdAt
+      ? new Date(i.createdAt).toISOString().slice(0, 10)
+      : "";
+
     if (dateFrom && itemDate) {
       if (itemDate < dateFrom) return false;
     }
@@ -122,20 +144,32 @@ function ItemManagement() {
     return true;
   });
 
-  // Custom status order for sorting
+  /* ---------- SORT ---------- */
   const statusOrderAsc = ["Deposited", "Claimed", "Unclaimed"];
   const statusOrderDesc = [...statusOrderAsc].reverse();
 
   if (sortField && sortOrder) {
     filteredItems = [...filteredItems].sort((a, b) => {
       if (sortField === "createdAt") {
-        const A = new Date(a.createdAt);
-        const B = new Date(b.createdAt);
+        // if archived mode is on, sort by archivedAt
+        const getDate = (obj) =>
+          advancedFilters.archived && obj.archivedAt ? new Date(obj.archivedAt) : new Date(obj.createdAt);
+        const A = getDate(a);
+        const B = getDate(b);
         return sortOrder === "asc" ? A - B : B - A;
-      } else if (sortField === "status") {
+      }
+
+      if (sortField === "status") {
         const order = sortOrder === "asc" ? statusOrderAsc : statusOrderDesc;
         return order.indexOf(a.status) - order.indexOf(b.status);
       }
+
+      if (sortField === "penalty") {
+        const A = Number(a.penalty || 0);
+        const B = Number(b.penalty || 0);
+        return sortOrder === "asc" ? A - B : B - A;
+      }
+
       return 0;
     });
   }
@@ -168,16 +202,25 @@ function ItemManagement() {
     }
   };
 
-  const handleDelete = async () => {
+  // ARCHIVE (replaces delete)
+  const handleArchive = async () => {
     try {
-      await fetch(`${API_BASE_URL}/api/items/${deleteItemId}`, { method: "DELETE" });
-      setItems((prev) => prev.filter((i) => i._id !== deleteItemId));
-      showToast("Item deleted");
+      const res = await fetch(`${API_BASE_URL}/api/items/${archiveItemId}/action`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "Archive" }),
+      });
+
+      const data = await res.json();
+      const updated = data.item || data;
+
+      setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+      showToast("Item archived");
     } catch {
-      showToast("Delete failed", "danger");
+      showToast("Archive failed", "danger");
     } finally {
-      setDeleteItemId(null);
-      setShowDeleteModal(false);
+      setArchiveItemId(null);
+      setShowArchiveModal(false);
     }
   };
 
@@ -205,6 +248,69 @@ function ItemManagement() {
     }
   };
 
+  /* ---------- UNARCHIVE (single + bulk) ---------- */
+  const performUnarchive = async (id) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/items/${id}/unarchive`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || "Unarchive failed", "danger");
+        return false;
+      }
+      const updated = await res.json();
+      setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+      showToast("Unarchived item");
+      return true;
+    } catch {
+      showToast("Unarchive failed", "danger");
+      return false;
+    }
+  };
+
+  const unarchiveSelected = async () => {
+    if (selectedArchivedIds.length === 0) return;
+    const ids = [...selectedArchivedIds];
+
+    try {
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`${API_BASE_URL}/api/items/${id}/unarchive`, { method: "PATCH" })
+            .then(async (res) => {
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                return { id, ok: false, error: err.error || "Unarchive failed" };
+              }
+              const updated = await res.json();
+              return { id, ok: true, updated };
+            })
+            .catch(() => ({ id, ok: false, error: "Unarchive failed" }))
+        )
+      );
+
+      // apply successful updates
+      setItems((prev) =>
+        prev.map((i) => {
+          const r = results.find((res) => res.id === i._id);
+          return r && r.ok ? r.updated : i;
+        })
+      );
+
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        showToast(`Unarchived ${ids.length} item(s)`);
+      } else {
+        showToast(`${failed.length} item(s) failed to unarchive`, "danger");
+      }
+    } catch {
+      showToast("Bulk unarchive failed", "danger");
+    } finally {
+      setSelectedArchivedIds([]);
+    }
+  };
+
+  /* ---------- TIME / HELPERS ---------- */
   const timeAgo = (date) => {
     const diff = Math.floor((Date.now() - new Date(date)) / 1000);
     if (diff < 60) return `${diff}s ago`;
@@ -215,7 +321,7 @@ function ItemManagement() {
 
   const getLastUpdated = () =>
     items.length
-      ? Math.max(...items.map((i) => new Date(i.updatedAt || i.createdAt)))
+      ? Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt))))
       : new Date();
 
   /* ---------- COLUMN SORT HANDLER (3 states) ---------- */
@@ -253,7 +359,10 @@ function ItemManagement() {
       penaltyMax: filters.penaltyMax ?? "",
       dateFrom: filters.dateFrom || "",
       dateTo: filters.dateTo || "",
+      archived: Boolean(filters.archived),
     });
+    // reset selected archived when toggling archived mode
+    setSelectedArchivedIds([]);
     showToast("Advanced filters applied", "success");
   };
 
@@ -266,7 +375,9 @@ function ItemManagement() {
       penaltyMax: "",
       dateFrom: "",
       dateTo: "",
+      archived: false,
     });
+    setSelectedArchivedIds([]);
     showToast("Advanced filters cleared", "success");
   };
 
@@ -275,7 +386,12 @@ function ItemManagement() {
     setStatusFilter("All");
     handleClearAdvancedFilters();
     setFilterPanelOpen(false);
-    showToast("Filters cleared", "success");
+
+    // ✅ Clear sorting
+    setSortField(null);
+    setSortOrder(null);
+
+    showToast("All filters & sorting cleared", "success");
   };
 
   const activeFilterCount = (() => {
@@ -287,9 +403,29 @@ function ItemManagement() {
     if (advancedFilters.penaltyMax !== "") c++;
     if (advancedFilters.dateFrom) c++;
     if (advancedFilters.dateTo) c++;
-    
+    if (advancedFilters.archived) c++;
     return c;
   })();
+
+  /* ---------- Selection helpers for archived items ---------- */
+  const toggleSelectArchived = (id) => {
+    setSelectedArchivedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const ids = filteredItems.map((u) => u._id);
+    if (ids.length === 0) return;
+    const allSelected = ids.every((id) => selectedArchivedIds.includes(id));
+    if (allSelected) setSelectedArchivedIds([]);
+    else setSelectedArchivedIds(ids);
+  };
+
+  const isAllSelected = () => {
+    const ids = filteredItems.map((u) => u._id);
+    return ids.length > 0 && ids.every((id) => selectedArchivedIds.includes(id));
+  };
 
   return (
     <div
@@ -347,21 +483,33 @@ function ItemManagement() {
           </div>
 
           <button
-            className="btn border"
-            style={{ height: "37px" }}
+            className="form-control btn "
+            style={{ height: "37px", width: "62px", border: "1px solid #D4C9BE" }}
             onClick={handleClearAll}
             title="Clear filters"
           >
             Clear
           </button>
-
-          <input
-            className="form-control"
-            placeholder="Search item"
-            style={{ maxWidth: 240, border: "1px solid #D4C9BE", height: "37px" }}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          
+          <div style={{ position: "relative", width: 264}}>
+            <BsSearch
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "10px",
+                transform: "translateY(-50%)",
+                color: "#6b6b6b",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              className="form-control"
+              placeholder="Search"
+              style={{ maxWidth: 240, border: "1px solid #D4C9BE", height: "37px", paddingLeft: "32px", }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -378,10 +526,28 @@ function ItemManagement() {
         }}
       >
         <div
-          className="px-3 py-2 fw-semibold"
+          className="px-3 py-2 fw-semibold d-flex justify-content-between align-items-center"
           style={{ borderBottom: "1px solid #D4C9BE", color: "#030303" }}
         >
-          Item Records Overview
+          <div>Item Records Overview</div>
+
+          {/* When viewing archived items, show Unarchive selected button */}
+          {advancedFilters.archived && (
+            <div className="d-flex gap-2 align-items-center">
+              <div className="small text-muted me-2">
+                {selectedArchivedIds.length} selected
+              </div>
+              <button
+                className="btn btn-sm"
+                style={{ background: "#123458", color: "#fff" }}
+                onClick={unarchiveSelected}
+                disabled={selectedArchivedIds.length === 0}
+                title="Unarchive selected items"
+              >
+                Unarchive selected
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="table-responsive flex-grow-1" style={{ overflowY: "auto" }}>
@@ -394,15 +560,27 @@ function ItemManagement() {
               <colgroup>
                 <col style={{ width: "4%" }} />
                 <col style={{ width: "8%" }} />
-                <col style={{ width: "32%" }} />
-                <col style={{ width: "18%" }} />
-                <col style={{ width: "12%" }} />
+                <col style={{ width: "25%" }} />
+                <col style={{ width: "19%" }} />
+                <col style={{ width: "11%" }} />
+                <col style={{ width: "7%" }} />
                 <col style={{ width: "10%" }} />
                 <col style={{ width: "16%" }} />
               </colgroup>
               <thead>
                 <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>#</th>
+                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
+                    {advancedFilters.archived ? (
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected()}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all displayed archived items"
+                      />
+                    ) : (
+                      "#"
+                    )}
+                  </th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Photo</th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Description</th>
                   <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Owner</th>
@@ -410,7 +588,14 @@ function ItemManagement() {
                     style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
                     onClick={() => toggleSort("createdAt")}
                   >
-                    Date {renderSortIcon("createdAt")}
+                    {advancedFilters.archived ? "Archived Date" : "Date"} {renderSortIcon("createdAt")}
+                  </th>
+                  <th
+                    className="text-center"
+                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                    onClick={() => toggleSort("penalty")}
+                  >
+                    Penalty {renderSortIcon("penalty")}
                   </th>
                   <th
                     className="text-center"
@@ -419,6 +604,7 @@ function ItemManagement() {
                   >
                     Status {renderSortIcon("status")}
                   </th>
+                  
                   <th
                     className="text-center"
                     style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
@@ -430,7 +616,22 @@ function ItemManagement() {
               <tbody>
                 {filteredItems.map((i, idx) => (
                   <tr key={i._id}>
-                    <td>{idx + 1}</td>
+
+                    {/* INDEX OR CHECKBOX */}
+                    <td>
+                      {advancedFilters.archived ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedArchivedIds.includes(i._id)}
+                          onChange={() => toggleSelectArchived(i._id)}
+                          aria-label={`Select archived item ${i.description}`}
+                        />
+                      ) : (
+                        idx + 1
+                      )}
+                    </td>
+
+                    {/* PHOTO */}
                     <td>
                       <img
                         src={i.photoUrl}
@@ -439,6 +640,8 @@ function ItemManagement() {
                         className="rounded"
                       />
                     </td>
+
+                    {/* DESCRIPTION */}
                     <td>
                       {editingItemId === i._id ? (
                         <input
@@ -452,6 +655,8 @@ function ItemManagement() {
                         i.description
                       )}
                     </td>
+
+                    {/* OWNER */}
                     <td>
                       {editingItemId === i._id ? (
                         <div className="d-flex gap-1">
@@ -476,6 +681,8 @@ function ItemManagement() {
                         `${i.firstname} ${i.lastname}`
                       )}
                     </td>
+
+                    {/* DATE */}
                     <td>
                       {editingItemId === i._id ? (
                         <input
@@ -490,9 +697,31 @@ function ItemManagement() {
                           }
                         />
                       ) : (
-                        new Date(i.createdAt).toLocaleDateString()
+                        // show archivedAt when in archived mode and archivedAt exists
+                        new Date(advancedFilters.archived && i.archivedAt ? i.archivedAt : i.createdAt).toLocaleDateString()
                       )}
                     </td>
+
+                    {/* PENALTY */}
+                    <td className="text-center" >
+                      {editingItemId === i._id ? (
+                        <input
+                          type="number"
+                          className="form-control form-control-sm"
+                          value={editedItem.penalty || 0}
+                          onChange={(e) =>
+                            setEditedItem({ ...editedItem, penalty: e.target.value })
+                          }
+                          
+                        />
+                      ) : (
+                        <small style={{ color: i.penalty > 0 ? "red" : "", fontWeight: i.penalty > 0 ? "bold" : "normal", padding: "2px 6px", }}>
+                          {i.penalty || 0}
+                        </small>
+                      )}
+                    </td>
+                    
+                    {/* STATUS */}
                     <td className="text-center">
                       {editingItemId === i._id ? (
                         <select
@@ -523,8 +752,24 @@ function ItemManagement() {
                         </span>
                       )}
                     </td>
+
+                    {/* ACTIONS */}
                     <td className="text-center">
-                      {editingItemId === i._id ? (
+                      {advancedFilters.archived ? (
+                        // Archived view: show Unarchive button for each row
+                        <div className="d-flex justify-content-center gap-2">
+                          <button
+                            className="btn btn-sm"
+                            style={{
+                              border: "1px solid #123458",
+                              color: "#123458",
+                            }}
+                            onClick={() => performUnarchive(i._id)}
+                          >
+                            Unarchive
+                          </button>
+                        </div>
+                      ) : editingItemId === i._id ? (
                         <>
                           <button
                             className="btn btn-sm me-2"
@@ -551,9 +796,19 @@ function ItemManagement() {
                             Edit
                           </button>
 
+                          <button
+                            className="btn btn-sm me-2"
+                            style={{ border: "1px solid #F08080", color: "#F08080" }}
+                            onClick={() => {
+                              setArchiveItemId(i._id);
+                              setShowArchiveModal(true);
+                            }}
+                          >
+                            Archive
+                          </button>
                           {i.status !== "Claimed" && (
                             <button
-                              className="btn btn-sm me-2"
+                              className="btn btn-sm "
                               style={{ border: "1px solid green", color: "green" }}
                               onClick={() => {
                                 setVerifyItemId(i._id);
@@ -563,17 +818,6 @@ function ItemManagement() {
                               Verify
                             </button>
                           )}
-
-                          <button
-                            className="btn btn-sm"
-                            style={{ border: "1px solid #F08080", color: "#F08080" }}
-                            onClick={() => {
-                              setDeleteItemId(i._id);
-                              setShowDeleteModal(true);
-                            }}
-                          >
-                            Archive
-                          </button>
                         </>
                       )}
                     </td>
@@ -588,7 +832,7 @@ function ItemManagement() {
           className="px-3 py-2 small"
           style={{ borderTop: "1px solid #D4C9BE", color: "#D4C9BE" }}
         >
-          Showing {filteredItems.length} of {items.length} items • Updated{" "}
+          Showing {filteredItems.length} of {visibleItems.length} items • Updated{" "}
           {timeAgo(getLastUpdated())}
         </div>
       </div>
@@ -621,8 +865,8 @@ function ItemManagement() {
         </div>
       )}
 
-      {/* DELETE MODAL */}
-      {showDeleteModal && (
+      {/* ARCHIVE MODAL */}
+      {showArchiveModal && (
         <div
           className="modal fade show d-block"
           style={{ background: "rgba(0,0,0,.5)" }}
@@ -630,18 +874,18 @@ function ItemManagement() {
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">
-                <h5>Confirm Delete</h5>
+                <h5>Confirm Archive</h5>
               </div>
-              <div className="modal-body">Are you sure you want to delete this item?</div>
+              <div className="modal-body">Are you sure you want to archive this item?</div>
               <div className="modal-footer">
                 <button
-                  className="btn btn-sm border"
-                  onClick={() => setShowDeleteModal(false)}
+                  className="btn border"
+                  onClick={() => setShowArchiveModal(false)}
                 >
                   Cancel
                 </button>
-                <button className="btn btn-sm btn-danger" onClick={handleDelete}>
-                  Delete
+                <button className="btn" style={{backgroundColor: "#123458", color: "#fff"}} onClick={handleArchive}>
+                  Yes, Archive
                 </button>
               </div>
             </div>
@@ -660,16 +904,16 @@ function ItemManagement() {
               <div className="modal-header">
                 <h5>Verify Item</h5>
               </div>
-              <div className="modal-body">Confirm item verification?</div>
+              <div className="modal-body">Mark Item as Claimed?</div>
               <div className="modal-footer">
                 <button
-                  className="btn btn-sm border"
+                  className="btn border"
                   onClick={() => setShowVerifyModal(false)}
                 >
                   Cancel
                 </button>
-                <button className="btn btn-sm btn-success" onClick={handleVerify}>
-                  Verify
+                <button className="btn" style={{backgroundColor: "#123458", color: "#fff"}} onClick={handleVerify}>
+                  Yes
                 </button>
               </div>
             </div>

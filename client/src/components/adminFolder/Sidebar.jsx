@@ -15,9 +15,10 @@ function Sidebar() {
         {[
           { to: "/admin/home", icon: "bi-house-door-fill", label: "Home" },
           { to: "/admin/user-management", icon: "bi-people-fill", label: "Users" },
+          // { to: "/admin/staff-management", icon: "bi-person-lines-fill", label: "Staff" },
           { to: "/admin/item-management", icon: "bi-box-seam", label: "Items" },
           { to: "/admin/reports", icon: "bi-graph-up", label: "Reports" },
-          // { to: "/admin/settings", icon: "bi-gear-fill", label: "Settings" },
+          { to: "/admin/settings", icon: "bi-gear-fill", label: "Settings" },
         ].map((item) => (
           <li key={item.to} className="nav-item">
             <NavLink
