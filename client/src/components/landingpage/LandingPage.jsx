@@ -256,7 +256,7 @@ function LandingPage() {
               <MdEmail size={16} /> wraptrackteam1.0@gmail.com
             </p>
             <p className="m-0 d-flex align-items-center gap-2">
-              <MdPhone size={16} /> 0991 129 6586
+              <MdPhone size={16} /> 0948 508 3516
             </p>
           </div>
 
