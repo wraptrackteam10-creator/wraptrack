@@ -470,10 +470,10 @@ function UserManagement() {
     );
   };
 
-  const selectAllVisible = () => {
-    const ids = sortedUsers.map((u) => u._id);
-    setSelectedArchivedIds(ids);
-  };
+  // const selectAllVisible = () => {
+  //   const ids = sortedUsers.map((u) => u._id);
+  //   setSelectedArchivedIds(ids);
+  // };
 
   const clearAllSelected = () => setSelectedArchivedIds([]);
 

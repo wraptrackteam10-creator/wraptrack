@@ -13,7 +13,6 @@ function GuardHistoryLog() {
   const [dateFilter, setDateFilter] = useState(""); // YYYY-MM-DD string
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
 
-  const goBack = () => navigate(-1);
   const handleViewDetails = (id) => setSelectedCard(selectedCard === id ? null : id);
 
   useEffect(() => {

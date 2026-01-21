@@ -4,9 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { LuArchiveX } from "react-icons/lu";
 import { IoCheckmarkCircleOutline } from "react-icons/io5";
 import { FaRegCalendarAlt, FaFilePdf } from "react-icons/fa";
-import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
+import { IoIosArrowDown } from "react-icons/io";
 import { CiFilter } from "react-icons/ci";
-import { MdOutlineKeyboardArrowRight, MdClear } from "react-icons/md";
+import { MdOutlineKeyboardArrowRight } from "react-icons/md";
 import { BsSearch } from "react-icons/bs";
 import jsPDF from "jspdf";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -466,7 +466,7 @@ function GuardItemManagement() {
     return ids.length > 0 && ids.every((id) => selectedArchivedIds.includes(id));
   };
 
-  const getLastUpdated = () =>
+  // const getLastUpdated = () =>
     items.length
       ? Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt)).getTime()))
       : new Date();
