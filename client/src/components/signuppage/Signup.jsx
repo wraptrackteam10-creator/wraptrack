@@ -203,7 +203,7 @@ function Signup() {
         otpRefs.current[firstEmptyIndex]?.focus();
       }
     }
-  }, [otpModalVisible]);
+  }, [otpModalVisible, otp]);
 
   // -----------------------------
   // OTP handlers

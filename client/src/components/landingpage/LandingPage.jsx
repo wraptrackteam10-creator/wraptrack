@@ -232,7 +232,7 @@ function LandingPage() {
             {[...cards, ...cards].map((_, index) => (
               <div key={index} style={{ flex: "0 0 auto", width: "300px", height: "193px", backgroundColor: "#F1EFEC", border: "1px solid #D4C9BE", borderRadius: "8px" }}>
                 <p className="text-muted m-0">
-                  <img src={cards[index % cards.length]} alt="Card Image" style={{ width: "100%", height: "auto", borderRadius: "8px"}} />
+                  <img src={cards[index % cards.length]} alt="" style={{ width: "100%", height: "auto", borderRadius: "8px"}} />
                 </p>
               </div>
             ))}

@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import { BsSearch } from "react-icons/bs";
 import "react-datepicker/dist/react-datepicker.css";
 import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function GuardHistoryLog() {
-  const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [selectedCard, setSelectedCard] = useState(null);
   const [search, setSearch] = useState("");
