@@ -16,33 +16,69 @@ export default function UserFilterPanel({
   const [email, setEmail] = useState("");
   const [types, setTypes] = useState([]);
   const [statuses, setStatuses] = useState([]);
-  const [archived, setArchived] = useState(false); // NEW: archived toggle
+  const [archived, setArchived] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0 });
 
   const panelRef = useRef(null);
 
+  const PANEL_WIDTH = 320;
+  const MOBILE_BREAKPOINT = 576; // bootstrap sm
+
+  /* ----------------------------
+     Initialize from filters
+  ----------------------------- */
   useEffect(() => {
     setUsername(initialFilters.username || "");
     setEmail(initialFilters.email || "");
     setTypes(initialFilters.types || []);
     setStatuses(initialFilters.statuses || []);
-    setArchived(Boolean(initialFilters.archived)); // initialize archived toggle
+    setArchived(Boolean(initialFilters.archived));
   }, [initialFilters]);
 
-  // POSITION UNDER BUTTON
+  /* ----------------------------
+     Positioning logic
+     Desktop: anchored
+     Mobile: centered
+  ----------------------------- */
   useEffect(() => {
     if (!show || !anchorRef?.current) return;
 
+    const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
+
+    // MOBILE → centered, fixed
+    if (isMobile) {
+      setPosition({
+        left: window.innerWidth / 2,
+        top: window.innerHeight * 0.15,
+      });
+      return;
+    }
+
+    // DESKTOP → anchored under button
     const rect = anchorRef.current.getBoundingClientRect();
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
+    const viewportWidth = window.innerWidth;
+
+    let left = rect.left + scrollX;
+
+    // prevent overflow right
+    if (left + PANEL_WIDTH > viewportWidth - 8) {
+      left = viewportWidth - PANEL_WIDTH - 8;
+    }
+
+    // prevent overflow left
+    left = Math.max(8, left);
 
     setPosition({
-      left: rect.left + scrollX,
+      left,
       top: rect.bottom + scrollY + 8,
     });
   }, [show, anchorRef]);
 
+  /* ----------------------------
+     Toggle helpers
+  ----------------------------- */
   const toggleType = (type) => {
     setTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
@@ -51,27 +87,34 @@ export default function UserFilterPanel({
 
   const toggleStatus = (status) => {
     setStatuses((prev) =>
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+      prev.includes(status)
+        ? prev.filter((s) => s !== status)
+        : [...prev, status]
     );
   };
 
   if (!show) return null;
 
+  const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
+
   return createPortal(
     <div
       ref={panelRef}
-      className="position-absolute p-3 rounded"
+      role="dialog"
+      aria-modal="true"
+      className="p-3 rounded"
       style={{
-        left: position.left,
-        top: position.top,
+        position: isMobile ? "fixed" : "absolute",
+        left: isMobile ? "50%" : position.left,
+        top: isMobile ? position.top : position.top,
+        transform: isMobile ? "translateX(-50%)" : "none",
+        width: isMobile ? "92%" : PANEL_WIDTH,
+        maxWidth: 360,
         zIndex: 3000,
-        width: 320,
         background: "#FFFFFF",
         border: "1px solid #030303",
         boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
       }}
-      role="dialog"
-      aria-modal="true"
     >
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-3">
@@ -132,7 +175,10 @@ export default function UserFilterPanel({
                   checked={types.includes(type)}
                   onChange={() => toggleType(type)}
                 />
-                <label className="form-check-label" style={{ fontSize: ".85rem" }}>
+                <label
+                  className="form-check-label"
+                  style={{ fontSize: ".85rem" }}
+                >
                   {type}
                 </label>
               </div>
@@ -160,7 +206,10 @@ export default function UserFilterPanel({
                   checked={statuses.includes(status)}
                   onChange={() => toggleStatus(status)}
                 />
-                <label className="form-check-label" style={{ fontSize: ".85rem" }}>
+                <label
+                  className="form-check-label"
+                  style={{ fontSize: ".85rem" }}
+                >
                   {status}
                 </label>
               </div>
@@ -179,7 +228,7 @@ export default function UserFilterPanel({
             Archived users
           </div>
           <small style={{ fontSize: ".75rem", color: "#6b6b6b" }}>
-            Show only archived accounts 
+            Show only archived accounts
           </small>
         </div>
         <div className="form-check form-switch m-0">
@@ -188,7 +237,6 @@ export default function UserFilterPanel({
             type="checkbox"
             checked={archived}
             onChange={(e) => setArchived(e.target.checked)}
-            aria-label="Show archived users only"
           />
         </div>
       </div>

@@ -7,7 +7,7 @@ import image4 from "../../images/carousel_4.png";
 import image5 from "../../images/carousel_5.png";
 import image6 from "../../images/carousel_6.png";
 import image7 from "../../images/carousel_7.png";
-import logo from "../../images/wraPtrack-removebg-preview.png";
+import logo from "../../images/wtlogo2.png";
 import { MdEmail, MdPhone } from "react-icons/md";
 import { FaGithub, FaUniversity, FaBars } from "react-icons/fa";
 import { NavLink } from 'react-router-dom';
@@ -227,7 +227,7 @@ function LandingPage() {
 
       {/* ---------------- INFINITE CAROUSEL ---------------- */}
       <section className="container pb-5">
-        <div className="p-4" style={{ backgroundColor: "#FFFFFF", border: "1px solid #D4C9BE", borderRadius: "12px", overflow: "hidden" }}>
+        <div className="p-3" style={{ backgroundColor: "#FFFFFF", border: "1px solid #D4C9BE", borderRadius: "12px", overflow: "hidden" }}>
           <div ref={trackRef} className="d-flex gap-3" onMouseEnter={() => (isPausedRef.current = true)} onMouseLeave={() => (isPausedRef.current = false)}>
             {[...cards, ...cards].map((_, index) => (
               <div key={index} style={{ flex: "0 0 auto", width: "300px", height: "193px", backgroundColor: "#F1EFEC", border: "1px solid #D4C9BE", borderRadius: "8px" }}>
@@ -242,16 +242,16 @@ function LandingPage() {
 
       {/* ---------------- FOOTER ---------------- */}
       <footer className="px-4 py-4" style={{ backgroundColor: "#123458", color: "#F1EFEC" }}>
-        <div className="container text-center text-md-start">
+        <div className="container d-flex flex-column justify-content-center text-start gap-1">
           <p className="fw-semibold m-0">WraPTrack</p>
-          <p className="m-0 d-flex align-items-center justify-content-center justify-content-md-start gap-2">
+          <p className="m-0 d-flex align-items-center gap-2">
             <FaUniversity size={14} />
             Davao Oriental State University
           </p>
           <p className="m-0">© 2025</p>
-          <p className="m-0">Rembrant Gumbason, Cristine Catambac, Nouf Masagnay</p>
+          {/* <p className="m-0">Rembrant Gumbason, Cristine Catambac, Nouf Masagnay</p> */}
 
-          <div className="mt-2 d-flex flex-column gap-1 align-items-center align-items-md-start">
+          <div className="mt-2 d-flex flex-column gap-1 align-items-start">
             <p className="m-0 d-flex align-items-center gap-2">
               <MdEmail size={16} /> wraptrackteam1.0@gmail.com
             </p>
@@ -260,12 +260,12 @@ function LandingPage() {
             </p>
           </div>
 
-          <div className="mt-3 d-flex gap-3 flex-wrap justify-content-center justify-content-md-start">
+          {/* <div className="mt-3 d-flex gap-3 flex-wrap justify-content-center justify-content-md-start">
             <a href="/About" className="text-light text-decoration-none">About</a>
             <a href="/Privacy" className="text-light text-decoration-none">Privacy Policy</a>
-          </div>
+          </div> */}
 
-          <p className="mt-3 mb-0 text-center text-md-start" style={{ fontSize: "0.85rem", opacity: 0.8 }}>
+          <p className="mt-3 mb-0 text-start" style={{ fontSize: "0.85rem", opacity: 0.8 }}>
             Progressive Web Application • Installable on supported devices
           </p>
         </div>

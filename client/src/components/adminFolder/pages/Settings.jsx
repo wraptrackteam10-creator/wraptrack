@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function Settings() {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
@@ -10,7 +11,9 @@ function Settings() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/settings`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/settings`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setSettings(data);
       } catch (err) {
@@ -41,9 +44,10 @@ function Settings() {
   // Save settings
   const saveSettings = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(settings),
       });
 

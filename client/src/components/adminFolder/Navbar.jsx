@@ -1,13 +1,23 @@
-import logo from "../../images/wtlogo2.png";
+import logo from "../../images/wtlogofinal.png";
 import { FaBars } from "react-icons/fa";
 import { CiLogout } from "react-icons/ci";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-
-function Navbar() {
+import { fetchWithAuth } from "../../utils/fetchWithAuth";
+/**
+ * Navbar:
+ * - shows a hamburger on small screens which calls onToggleSidebar (passed as prop).
+ * - keeps the desktop menu button hidden (we use persistent sidebar there).
+ *
+ * Props:
+ * - onToggleSidebar: () => void
+ */
+function Navbar({ onToggleSidebar }) {
   const [showMenu, setShowMenu] = useState(false);
   const navigate = useNavigate();
   const menuRef = useRef(null);
+
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -19,35 +29,64 @@ function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await fetchWithAuth(`${API_BASE_URL}/api/logout`, {
+        method: "POST",
+        credentials: "include",
+      })
+    } catch (error) {
+      console.error("Logout error", error);
+    };
+
+    localStorage.removeItem("user");
+    navigate("/");
+    setShowMenu(false);
+  };
+
   return (
     <div
-      className="d-flex align-items-center justify-content-between px-4 py-2"
+      className="d-flex align-items-center justify-content-between px-3 py-2"
       style={{ backgroundColor: "#123458" }}
     >
-      {/* Logo + App name */}
       <div className="d-flex align-items-center gap-2">
-        <img
-          src={logo}
-          alt="WraPTrack Logo"
-          style={{ width: 40, height: 40 }}
-        />
-        <h4 className="m-0 fw-semibold" style={{ color: "#F1EFEC" }}>
+        {/* Hamburger: visible only on mobile (below md) */}
+        <button
+          className="btn p-1 d-md-none"
+          onClick={onToggleSidebar}
+          aria-label="Toggle menu"
+          style={{ background: "transparent", border: "none", color: "#F1EFEC" }}
+        >
+          <FaBars size={20} />
+        </button>
+
+        <img src={logo} alt="WraPTrack Logo" style={{ width: 36, height: 36 }} />
+        <h4 className="m-0 fw-semibold d-sm-block" style={{ color: "#F1EFEC" }}>
           WraPTrack
         </h4>
       </div>
 
-      {/* Page title */}
-      <h5 className="m-0 fw-semibold" style={{ color: "#F1EFEC" }}>
+      {/* Page title: hide on very small screens to save space */}
+      <h5 className="m-0 fw-semibold d-none d-md-block" style={{ color: "#F1EFEC" }}>
         Admin Dashboard
       </h5>
 
       {/* Menu */}
       <div ref={menuRef} className="position-relative">
-        <FaBars
-          size={22}
+        <div
+          role="button"
+          onClick={() => setShowMenu((s) => !s)}
           style={{ color: "#F1EFEC", cursor: "pointer" }}
-          onClick={() => setShowMenu(prev => !prev)}
-        />
+          aria-haspopup="true"
+          aria-expanded={showMenu}
+        >
+          {/* Simple three-dot / menu indicator */}
+          <svg width="20" height="6" viewBox="0 0 20 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="3" cy="3" r="3" fill="#F1EFEC" />
+            <circle cx="10" cy="3" r="3" fill="#F1EFEC" />
+            <circle cx="17" cy="3" r="3" fill="#F1EFEC" />
+          </svg>
+        </div>
 
         {showMenu && (
           <div
@@ -64,9 +103,7 @@ function Navbar() {
                 className="p-2 small d-flex align-items-center gap-2"
                 style={{ color: "#7a1f1f", cursor: "pointer" }}
                 onClick={() => {
-                  localStorage.removeItem("user");
-                  navigate("/");
-                  setShowMenu(false);
+                  handleLogout();
                 }}
               >
                 <CiLogout size={18} /> Logout

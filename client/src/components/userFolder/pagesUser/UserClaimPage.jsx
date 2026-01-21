@@ -2,6 +2,38 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { LuArrowLeft } from "react-icons/lu";
 import { FaBoxOpen } from "react-icons/fa";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
+
+/**
+ * Updated UserClaimPage
+ * - Color system and UI follow the project's design rules.
+ * - Desktop (md+): table view with columns: #, Photo, Description, Owner, Date, Time, Status, Actions (Claim).
+ * - Mobile: card layout (touch friendly) — similar to previous design.
+ * - Header and buttons use the specified colors:
+ *   - App background: #F1EFEC
+ *   - Header/footer: #123458 with header text #F1EFEC
+ *   - Card / Table surface: #FFFFFF, borders: #D4C9BE
+ *   - Primary action: #123458
+ *   - Delete / danger: #F08080
+ */
+
+const COLORS = {
+  appBg: "#F1EFEC",
+  header: "#123458",
+  headerText: "#F1EFEC",
+  surface: "#FFFFFF",
+  border: "#D4C9BE",
+  primary: "#123458",
+  delete: "#F08080",
+  text: "#030303",
+  muted: "#D4C9BE",
+  status: {
+    Deposited: "#D4C9BE",
+    Claimed: "#90EE90",
+    Unclaimed: "#F08080",
+    "Pending Verification": "#FFD700",
+  },
+};
 
 function UserClaimPage() {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
@@ -13,22 +45,22 @@ function UserClaimPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user")) : null;
   const goBack = () => navigate(-1);
 
-  // =============================
-  // TOAST FUNCTION
-  // =============================
+  // TOAST
   const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
 
-  // ✅ Load settings
+  // Load settings
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/settings`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/settings`, {
+          credentials: "include",
+        });
         const data = await res.json();
         if (res.ok) setSettings(data);
         else showToast(data.error || "Failed to load settings", "danger");
@@ -40,18 +72,21 @@ function UserClaimPage() {
       }
     };
     fetchSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API_BASE_URL]);
 
-  // ✅ Load user items
+  // Load user items
   useEffect(() => {
     const fetchItems = async () => {
       if (!user) return;
       try {
-        const res = await fetch(`${API_BASE_URL}/api/items`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items`, {
+          credentials: "include",
+        });
         const data = await res.json();
 
         if (res.ok) {
-          const userItems = data.filter(
+          const userItems = (data || []).filter(
             (item) =>
               item.userId?._id === user?.id &&
               (item.status === "Deposited" || item.status === "Pending Verification")
@@ -68,12 +103,13 @@ function UserClaimPage() {
     fetchItems();
   }, [user, API_BASE_URL]);
 
-  // ✅ Handle claim request
+  // Handle claim request
   const handleClaim = async (itemId) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/items/${itemId}/status`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${itemId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ status: "Pending Verification" }),
       });
 
@@ -82,9 +118,7 @@ function UserClaimPage() {
       if (res.ok) {
         showToast("✅ Requested claim, waiting for verification!", "success");
         setItems((prev) =>
-          prev.map((item) =>
-            item._id === itemId ? { ...item, status: "Pending Verification" } : item
-          )
+          prev.map((item) => (item._id === itemId ? { ...item, status: "Pending Verification" } : item))
         );
       } else {
         showToast(data.error || "❌ Failed to update status", "danger");
@@ -95,157 +129,259 @@ function UserClaimPage() {
     }
   };
 
-  if (loading) return <p className="text-center mt-5">Loading settings...</p>;
+  if (loading) {
+    return (
+      <div style={{ background: COLORS.appBg, minHeight: "100vh" }} className="d-flex align-items-center justify-content-center">
+        <div className="text-center">
+          <div style={{ color: COLORS.muted }}>Loading settings...</div>
+        </div>
+      </div>
+    );
+  }
 
   const canClaim = settings?.studentAccess && !settings?.loginRestriction;
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column position-relative">
-      {/* FIXED HEADER */}
+    <div style={{ background: COLORS.appBg, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* HEADER */}
       <div
-        className="text-center py-4 bg-dark text-white shadow-sm"
-        style={{ position: "fixed", top: 0, left: 0, width: "100%", zIndex: 1000 }}
+        style={{
+          position: "sticky",
+          top: 0,
+          left: 0,
+          width: "100%",
+          zIndex: 1000,
+          background: COLORS.header,
+          color: COLORS.headerText,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+          padding: "12px 0",
+        }}
       >
-        <div className="d-flex align-items-center justify-content-between px-3">
+        <div className="container d-flex align-items-center justify-content-between">
           <button
-            className="btn btn-link text-white p-0"
             onClick={goBack}
-            style={{ textDecoration: "none" }}
+            className="btn btn-link p-0"
+            style={{ color: COLORS.headerText, textDecoration: "none" }}
+            aria-label="Go back"
           >
             <LuArrowLeft size={22} />
           </button>
-          <h4 className="fw-bold mb-0 flex-grow-1 text-center">Claim Items</h4>
-          <div style={{ width: "22px" }}></div>
+
+          <div style={{ textAlign: "center", flex: 1 }}>
+            <div style={{ fontWeight: 700 }}>Claim Items</div>
+            <small style={{ color: COLORS.headerText, opacity: 0.95 }}>Manage your deposited items here</small>
+          </div>
+
+          <div style={{ width: 36 }} />
         </div>
-        <small>Manage your deposited items here</small>
       </div>
 
       {/* CONTENT */}
       <div
         className="container flex-grow-1 py-4"
         style={{
-          marginTop: "100px",
+          marginTop: 84,
           overflowY: "auto",
-          maxHeight: "calc(100vh - 100px)",
+          maxHeight: "calc(100vh - 84px)",
         }}
       >
-        {items.length > 0 ? (
-          <div className="row g-4">
-            {items.map((item) => (
-              <div key={item._id} className="col-12 col-md-6">
-                <div
-                  className="card border-0 shadow-sm rounded-4 overflow-hidden h-100"
-                  style={{
-                    transition: "transform 0.2s ease, box-shadow 0.2s ease",
-                    backgroundColor: "#fff",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-                >
-                  {/* IMAGE */}
-                  <div
-                    className="bg-secondary-subtle d-flex align-items-center justify-content-center"
-                    style={{
-                      height: "220px",
-                      overflow: "hidden",
-                      borderBottom: "1px solid #eee",
-                      cursor: item.photo?.data ? "pointer" : "default",
-                    }}
-                    onClick={() =>
-                      item.photoUrl &&
-                      setSelectedImage(item.photoUrl || "/logo.png")
-                    }
-                  >
-                    {item.photoUrl ? (
-                      <img
-                        src={item.photoUrl || "/logo.png"}
-                        alt="Item"
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          objectPosition: "center",
-                        }}
-                      />
-                    ) : (
-                      <FaBoxOpen size={70} color="#6c757d" />
-                    )}
-                  </div>
+        {/* Desktop table view */}
+        <div className="d-none d-md-block">
+          <div className="card" style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+            <div className="card-body p-0">
+              <div className="table-responsive">
+                <table className="table mb-0 align-middle">
+                  <thead style={{ background: COLORS.surface, borderBottom: `1px solid ${COLORS.border}` }}>
+                    <tr>
+                      <th style={{ width: 48 }}>#</th>
+                      <th style={{ width: 120 }}>Photo</th>
+                      <th>Description</th>
+                      <th style={{ width: 160 }}>Owner</th>
+                      <th style={{ width: 120 }}>Date</th>
+                      <th style={{ width: 90 }}>Time</th>
+                      <th style={{ width: 140 }}>Status</th>
+                      <th style={{ width: 140 }} className="text-end">Action</th>
+                    </tr>
+                  </thead>
 
-                  {/* INFO */}
-                  <div className="p-3 d-flex flex-column justify-content-between">
-                    <div>
-                      <h6 className="fw-bold text-dark mb-1">
-                        {item.description || "No description"}
-                      </h6>
-                      <small className="text-muted d-block mb-2">
-                        {new Date(item.createdAt).toLocaleString([], {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </small>
+                  <tbody>
+                    {items.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-5" style={{ color: COLORS.muted }}>
+                          <div>
+                            <FaBoxOpen size={40} className="mb-2" />
+                            <div>No items to claim yet</div>
+                            <div className="small" style={{ color: COLORS.muted }}>Items you deposited will appear here once verified.</div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      items.map((item, i) => (
+                        <tr key={item._id}>
+                          <td>{i + 1}</td>
+                          <td>
+                            <img
+                              src={item.photoUrl || "/logo.png"}
+                              alt="thumb"
+                              style={{ width: 110, height: 72, objectFit: "cover", borderRadius: 6, border: `1px solid ${COLORS.border}`, cursor: "pointer" }}
+                              onClick={() => item.photoUrl && setSelectedImage(item.photoUrl)}
+                            />
+                          </td>
+                          <td style={{ color: COLORS.text, fontWeight: 600 }}>{item.description || "No description"}</td>
+                          <td style={{ color: COLORS.muted }}>
+                            {item.userId?.firstname || user?.firstname || "—"} {item.userId?.lastname || user?.lastname || ""}
+                          </td>
+                          <td style={{ color: COLORS.muted }}>{new Date(item.createdAt).toLocaleDateString()}</td>
+                          <td style={{ color: COLORS.muted }}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
+                          <td>
+                            <span
+                              style={{
+                                background: COLORS.status[item.status] || COLORS.status.Deposited,
+                                color: item.status === "Pending Verification" ? "#000" : "#030303",
+                                padding: "6px 10px",
+                                borderRadius: 999,
+                                fontWeight: 600,
+                                display: "inline-block",
+                              }}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="text-end">
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => {
+                                if (!canClaim || item.status === "Pending Verification") return;
+                                handleClaim(item._id);
+                              }}
+                              disabled={!canClaim || item.status === "Pending Verification"}
+                              style={{
+                                background: canClaim && item.status !== "Pending Verification" ? COLORS.primary : COLORS.muted,
+                                color: COLORS.headerText,
+                                border: `1px solid ${canClaim && item.status !== "Pending Verification" ? COLORS.primary : COLORS.border}`,
+                                padding: "6px 12px",
+                                borderRadius: 8,
+                                cursor: !canClaim || item.status === "Pending Verification" ? "not-allowed" : "pointer",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {!canClaim ? "Claiming unavailable" : item.status === "Pending Verification" ? "Verifying…" : "Claim"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="d-block d-md-none">
+          {items.length === 0 ? (
+            <div className="text-center py-5" style={{ color: COLORS.muted }}>
+              <FaBoxOpen size={60} className="mb-3" />
+              <h6 style={{ color: COLORS.text }}>No items to claim yet</h6>
+              <p className="small">Items you deposited will appear here once verified.</p>
+            </div>
+          ) : (
+            <div className="row g-3">
+              {items.map((item) => (
+                <div key={item._id} className="col-12">
+                  <div
+                    className="card shadow-sm"
+                    style={{ border: `1px solid ${COLORS.border}`, overflow: "hidden" }}
+                  >
+                    <div
+                      style={{
+                        height: 220,
+                        overflow: "hidden",
+                        cursor: item.photoUrl ? "pointer" : "default",
+                      }}
+                      onClick={() => item.photoUrl && setSelectedImage(item.photoUrl)}
+                    >
+                      {item.photoUrl ? (
+                        <img
+                          src={item.photoUrl}
+                          alt="Item"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <div className="d-flex align-items-center justify-content-center" style={{ height: "100%", background: "#f8f9fa" }}>
+                          <FaBoxOpen size={60} color="#6c757d" />
+                        </div>
+                      )}
                     </div>
 
-                    {/* CLAIM BUTTON */}
-                    <div className="mt-2">
-                      <button
-                        className={`btn fw-semibold w-100 py-2 rounded-3 ${
-                          !canClaim
-                            ? "btn-secondary"
-                            : item.status === "Pending Verification"
-                            ? "btn-secondary"
-                            : "btn-dark"
-                        }`}
-                        style={{
-                          fontSize: "0.9rem",
-                          transition: "0.2s",
-                          cursor:
-                            !canClaim || item.status === "Pending Verification"
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                        onClick={() =>
-                          canClaim &&
-                          item.status !== "Pending Verification" &&
-                          handleClaim(item._id)
-                        }
-                        disabled={!canClaim || item.status === "Pending Verification"}
-                      >
-                        {!canClaim
-                          ? "⚠️ Claiming unavailable – contact admin"
-                          : item.status === "Pending Verification"
-                          ? "⏳ Verifying..."
-                          : "Claim"}
-                      </button>
+                    <div className="p-3 d-flex flex-column gap-2">
+                      <div>
+                        <div style={{ fontWeight: 700, color: COLORS.text }}>{item.description || "No description"}</div>
+                        <div className="small" style={{ color: COLORS.muted }}>
+                          {item.userId?.firstname || user?.firstname} {item.userId?.lastname || user?.lastname} • {new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+
+                      <div className="d-flex gap-2">
+                        <div style={{ flex: 1 }}>
+                          <span
+                            style={{
+                              background: COLORS.status[item.status] || COLORS.status.Deposited,
+                              color: item.status === "Pending Verification" ? "#000" : "#030303",
+                              padding: "6px 10px",
+                              borderRadius: 999,
+                              fontWeight: 600,
+                              display: "inline-block",
+                            }}
+                          >
+                            {item.status}
+                          </span>
+                        </div>
+
+                        <div style={{ flex: 1 }}>
+                          <button
+                            onClick={() => {
+                              if (!canClaim || item.status === "Pending Verification") return;
+                              handleClaim(item._id);
+                            }}
+                            disabled={!canClaim || item.status === "Pending Verification"}
+                            style={{
+                              width: "100%",
+                              background: canClaim && item.status !== "Pending Verification" ? COLORS.primary : COLORS.muted,
+                              color: COLORS.headerText,
+                              border: "none",
+                              padding: "10px 12px",
+                              borderRadius: 8,
+                              fontWeight: 700,
+                              cursor: !canClaim || item.status === "Pending Verification" ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {!canClaim ? "Claiming unavailable" : item.status === "Pending Verification" ? "Verifying…" : "Claim"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center text-muted mt-5">
-            <FaBoxOpen size={60} className="mb-3" />
-            <h6>No items to claim yet</h6>
-            <p className="small">
-              Items you deposited will appear here once verified.
-            </p>
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* FULLSCREEN IMAGE VIEWER */}
       {selectedImage && (
         <div
-          className="position-fixed top-0 start-0 w-100 h-100 bg-black bg-opacity-75 d-flex align-items-center justify-content-center"
-          style={{ zIndex: 2000, cursor: "zoom-out" }}
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ zIndex: 2000, background: "rgba(0,0,0,0.75)", cursor: "zoom-out" }}
           onClick={() => setSelectedImage(null)}
         >
           <img
             src={selectedImage}
             alt="Full View"
             className="rounded shadow-lg"
-            style={{ maxWidth: "90%", maxHeight: "90%", objectFit: "contain" }}
+            style={{ maxWidth: "90%", maxHeight: "90%", objectFit: "contain", border: `1px solid ${COLORS.border}`, background: COLORS.surface }}
           />
         </div>
       )}
@@ -253,14 +389,13 @@ function UserClaimPage() {
       {/* TOAST */}
       {toast.show && (
         <div
-          className={`position-fixed bottom-0 end-0 m-3 p-3 rounded shadow ${
-            toast.type === "success"
-              ? "bg-success text-white"
-              : toast.type === "danger"
-              ? "bg-danger text-white"
-              : "bg-warning text-dark"
-          }`}
-          style={{ zIndex: 2000, minWidth: "250px" }}
+          className={`position-fixed bottom-0 end-0 m-3 p-3 rounded shadow`}
+          style={{
+            zIndex: 2000,
+            minWidth: 250,
+            background: toast.type === "success" ? COLORS.primary : toast.type === "danger" ? COLORS.delete : "#ffc107",
+            color: toast.type === "warning" ? COLORS.text : "#fff",
+          }}
         >
           {toast.message}
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { GiClockwork } from "react-icons/gi";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function GuardHomePage() {
     const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
@@ -16,7 +17,9 @@ function GuardHomePage() {
     useEffect(() => {
         const fetchSummary = async () => {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/items/summary`);
+                const res = await fetchWithAuth(`${API_BASE_URL}/api/items/summary`, {
+                    credentials: "include",
+                });
                 const data = await res.json();
                 setSummary(data);
             } catch (error) {
@@ -30,7 +33,9 @@ function GuardHomePage() {
     useEffect(() => {
         const fetchAndBuildRecent = async () => {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/items`);
+                const res = await fetchWithAuth(`${API_BASE_URL}/api/items`, {
+                    credentials: "include",
+                });
                 const items = await res.json();
                 if (!Array.isArray(items)) return setRecent([]);
 

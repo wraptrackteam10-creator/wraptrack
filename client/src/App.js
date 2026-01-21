@@ -24,10 +24,71 @@ import GuardHistoryLog from "./components/guardFolder/pagesGuard/GuardHistoryLog
 // import { SettingsProvider } from "./context/SettingsContext";
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
 import "react-datepicker/dist/react-datepicker.css";
 
 function App() {
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
+
+  useEffect(() => {
+    const handler = () => setSessionExpired(true);
+    window.addEventListener("session-expired", handler);
+
+    return () => window.removeEventListener("session-expired", handler);
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await fetch(`${API_BASE_URL}/api/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    }catch (error) {
+      console.error("Logout error", error);
+    };
+
+    localStorage.removeItem("user");
+    window.location.href = "/sign-in";
+  };
+  
   return (
+    <>
+    {sessionExpired && (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div
+          style={{
+            background: "#fff",
+            padding: "20px",
+            borderRadius: "8px",
+            width: "300px",
+            textAlign: "center",
+          }}
+        >
+          <h5>Session Expired</h5>
+          <p>Please login again.</p>
+          <button
+            onClick={() => {
+              handleLogout();
+            }}
+            className="btn btn-primary"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    )}
+
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -60,6 +121,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </>
   );
 }
 

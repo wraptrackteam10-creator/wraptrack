@@ -59,8 +59,8 @@ const maskEmailLocalPart = (email) => {
     return `${local[0]}${"*".repeat(Math.max(0, local.length - 1))}@${domain}`;
   }
   // show first 2 and last char, mask middle (safe repeat)
-  const middleCount = Math.max(0, local.length - 3);
-  return `${local.slice(0, 2)}${"*".repeat(middleCount)}${local.slice(-1)}@${domain}`;
+  const middleCount = Math.max(0, local.length - 4);
+  return `${local.slice(0, 3)}${"*".repeat(middleCount)}${local.slice(-1)}@${domain}`;
 };
 
 const requestOtp = async (req, res) => {

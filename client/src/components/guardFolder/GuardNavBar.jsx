@@ -1,8 +1,9 @@
-import logo from "../../images/wtlogo2.png";
+import logo from "../../images/wtlogofinal.png";
 import { FaBell, FaBars } from "react-icons/fa";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { CiLogout } from "react-icons/ci";
+import { fetchWithAuth } from "../../utils/fetchWithAuth";
 
 function GuardNavBar() {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -22,7 +23,7 @@ function GuardNavBar() {
     const fetchNotifications = async () => {
       if (!user) return;
       try {
-        const res = await fetch(`${API_BASE_URL}/api/notifications/${user.id}`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/notifications/${user.id}`);
         const data = await res.json();
         if (res.ok) setNotifications(data);
       } catch (error) {
@@ -50,6 +51,21 @@ function GuardNavBar() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await fetchWithAuth(`${API_BASE_URL}/api/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.error("Logout error", error);
+    };
+
+    localStorage.removeItem("user");
+    navigate("/sign-in");
+    setShowMenu(false);
+  };
 
   return (
     <div>
@@ -156,9 +172,7 @@ function GuardNavBar() {
                     className="p-2 small d-flex align-items-center gap-2"
                     style={{ color: "#7a1f1f", cursor: "pointer" }}
                     onClick={() => {
-                      localStorage.removeItem("user");
-                      navigate("/sign-in");
-                      setShowMenu(false);
+                      handleLogout();
                     }}
                   >
                     <CiLogout size={18} /> Logout

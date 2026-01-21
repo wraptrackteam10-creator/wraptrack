@@ -6,6 +6,7 @@ import { CiFilter } from "react-icons/ci";
 import { BsSearch } from "react-icons/bs";
 import "bootstrap/dist/css/bootstrap.min.css";
 import ItemFilterPanel from "./ItemFilterPanel";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function ItemManagement() {
   const [items, setItems] = useState([]);
@@ -45,37 +46,116 @@ function ItemManagement() {
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
 
+  // track first load so we show loading indicator only initially
+  const initialLoadRef = useRef(true);
+
   /* ---------- TOAST ---------- */
   const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
   };
 
-  /* ---------- FETCH ITEMS ---------- */
+  /* ---------- helper: shallow-ish equality for items ---------- */
+  const isSameItem = (a = {}, b = {}) => {
+    // Compare a small set of fields that are expected to change when the item updates.
+    // If none of these changed, we consider the item "unchanged" and reuse the old reference.
+    return (
+      a._id === b._id &&
+      (a.updatedAt || "") === (b.updatedAt || "") &&
+      (a.archivedAt || "") === (b.archivedAt || "") &&
+      (a.status || "") === (b.status || "") &&
+      Number(a.penalty || 0) === Number(b.penalty || 0) &&
+      (a.description || "") === (b.description || "") &&
+      (a.firstname || "") === (b.firstname || "") &&
+      (a.lastname || "") === (b.lastname || "") &&
+      (a.photoUrl || "") === (b.photoUrl || "")
+    );
+  };
+
+  /* ---------- FETCH ITEMS (polling, merge updates to avoid flicker) ---------- */
   useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+
     const fetchItems = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/items`);
+        const archivedParam = advancedFilters.archived ? "?archived=true" : "";
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items${archivedParam}`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!isMounted) return;
+        if (!res.ok) {
+          // try to read error but continue gracefully
+          try {
+            const err = await res.json();
+            console.error("Fetch items error:", err);
+          } catch (e) {
+            console.error("Fetch items error, non-json response");
+          }
+          return;
+        }
         const data = await res.json();
-        setItems(data);
-      } catch {
-        showToast("Failed to load items", "danger");
-      } finally {
+
+        if (!isMounted) return;
+
+        // Initial load: set items and clear loading
+        if (initialLoadRef.current) {
+          setItems(data);
+          setLoading(false);
+          initialLoadRef.current = false;
+          return;
+        }
+
+        // Merge strategy: keep previous object references when an item is unchanged.
+        setItems((prev) => {
+          const prevById = new Map(prev.map((p) => [p._id, p]));
+          let changed = false;
+
+          // Maintain order from server response
+          const merged = data.map((newItem) => {
+            const prevItem = prevById.get(newItem._id);
+            if (prevItem && isSameItem(prevItem, newItem)) {
+              // reuse previous object reference
+              return prevItem;
+            } else {
+              changed = true;
+              return newItem;
+            }
+          });
+
+          // Also check if counts differ (deleted or new items)
+          if (!changed && merged.length === prev.length) {
+            // no changes detected
+            return prev;
+          }
+          return merged;
+        });
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        console.error("Failed to load items:", err);
+        // show toast only on first load to avoid spamming during polling
+        if (initialLoadRef.current) showToast("Failed to load items", "danger");
         setLoading(false);
+        initialLoadRef.current = false;
       }
     };
+
+    // run immediately
     fetchItems();
     const interval = setInterval(fetchItems, 5000); // every 5 seconds
 
-    return () => clearInterval(interval);
-  }, [API_BASE_URL]);
+    return () => {
+      isMounted = false;
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [API_BASE_URL, advancedFilters.archived]);
 
   /* ---------- FILTER / VISIBLE SET ---------- */
-  // When archived mode is true, show only archived items (archivedAt truthy).
-  // Otherwise show non-archived items.
-  const visibleItems = items.filter((i) =>
-    advancedFilters.archived ? Boolean(i.archivedAt) : !i.archivedAt
-  );
+  // server now returns items already filtered by archived state for the viewer role,
+  // so visibleItems is just items (we still apply local search/status/advanced filters)
+  const visibleItems = items;
 
   // Base filtered list (search + status)
   let filteredItems = visibleItems.filter((i) => {
@@ -153,7 +233,7 @@ function ItemManagement() {
       if (sortField === "createdAt") {
         // if archived mode is on, sort by archivedAt
         const getDate = (obj) =>
-          advancedFilters.archived && obj.archivedAt ? new Date(obj.archivedAt) : new Date(obj.createdAt);
+          advancedFilters.archived && obj.archivedAt ? new Date(obj.archivedAt) : new Date(obj.createdAt || 0);
         const A = getDate(a);
         const B = getDate(b);
         return sortOrder === "asc" ? A - B : B - A;
@@ -185,14 +265,16 @@ function ItemManagement() {
     try {
       const { photo, ...clean } = editedItem;
 
-      const res = await fetch(`${API_BASE_URL}/api/items/${editedItem._id}`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${editedItem._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(clean),
       });
 
       const updated = await res.json();
 
+      // Replace only the updated item in state (preserve other references).
       setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
       setEditingItemId(null);
       setEditedItem({});
@@ -205,9 +287,10 @@ function ItemManagement() {
   // ARCHIVE (replaces delete)
   const handleArchive = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/items/${archiveItemId}/action`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${archiveItemId}/action`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ action: "Archive" }),
       });
 
@@ -226,13 +309,15 @@ function ItemManagement() {
 
   const handleVerify = async () => {
     try {
+      // optimistic UI change (quick feedback)
       setItems((prev) =>
         prev.map((i) => (i._id === verifyItemId ? { ...i, status: "Claimed" } : i))
       );
 
-      const res = await fetch(`${API_BASE_URL}/api/items/${verifyItemId}/status`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${verifyItemId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ status: "Claimed" }),
       });
 
@@ -251,8 +336,9 @@ function ItemManagement() {
   /* ---------- UNARCHIVE (single + bulk) ---------- */
   const performUnarchive = async (id) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/items/${id}/unarchive`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${id}/unarchive`, {
         method: "PATCH",
+        credentials: "include",
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -276,7 +362,10 @@ function ItemManagement() {
     try {
       const results = await Promise.all(
         ids.map((id) =>
-          fetch(`${API_BASE_URL}/api/items/${id}/unarchive`, { method: "PATCH" })
+          fetchWithAuth(`${API_BASE_URL}/api/items/${id}/unarchive`, {
+            method: "PATCH",
+            credentials: "include",
+          })
             .then(async (res) => {
               if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -312,7 +401,8 @@ function ItemManagement() {
 
   /* ---------- TIME / HELPERS ---------- */
   const timeAgo = (date) => {
-    const diff = Math.floor((Date.now() - new Date(date)) / 1000);
+    const d = new Date(date);
+    const diff = Math.floor((Date.now() - d) / 1000);
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -321,7 +411,7 @@ function ItemManagement() {
 
   const getLastUpdated = () =>
     items.length
-      ? Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt))))
+      ? new Date(Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt || 0)).getTime())))
       : new Date();
 
   /* ---------- COLUMN SORT HANDLER (3 states) ---------- */
@@ -347,6 +437,7 @@ function ItemManagement() {
     if (sortOrder === "desc") {
       return field === "status" ? <FaSortUp /> : <FaSortDown />;
     }
+    return <TiArrowUnsorted />;
   };
 
   /* ---------- Advanced filter handlers ---------- */
@@ -439,17 +530,17 @@ function ItemManagement() {
     >
       {/* HEADER */}
       <div
-        className="d-flex justify-content-between mb-2 p-3 rounded"
+        className="d-flex justify-content-between mb-2 p-3 rounded flex-wrap"
         style={{ background: "#FFF", border: "1px solid #D4C9BE" }}
       >
-        <div>
+        <div className="me-2" style={{ minWidth: 220 }}>
           <h4 className="fw-semibold mb-1">Item Management</h4>
           <small style={{ color: "#6b6b6b" }}>
             Manage, edit, and monitor all deposited items
           </small>
         </div>
 
-        <div className="d-flex gap-2 align-items-center">
+        <div className="d-flex gap-2 align-items-center mt-2 mt-md-0 flex-wrap flex-md-nowrap">
           <select
             className="form-select"
             style={{ maxWidth: 150, height: "37px", border: "1px solid #D4C9BE" }}
@@ -491,7 +582,7 @@ function ItemManagement() {
             Clear
           </button>
           
-          <div style={{ position: "relative", width: 264}}>
+          <div style={{ position: "relative", minWidth: 140, maxWidth: 264 }}>
             <BsSearch
               style={{
                 position: "absolute",
@@ -505,7 +596,7 @@ function ItemManagement() {
             <input
               className="form-control"
               placeholder="Search"
-              style={{ maxWidth: 240, border: "1px solid #D4C9BE", height: "37px", paddingLeft: "32px", }}
+              style={{ width: "100%", border: "1px solid #D4C9BE", height: "37px", paddingLeft: "32px" }}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -556,275 +647,447 @@ function ItemManagement() {
               Loading items…
             </p>
           ) : (
-            <table className="table mb-0 align-middle">
-              <colgroup>
-                <col style={{ width: "4%" }} />
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "25%" }} />
-                <col style={{ width: "19%" }} />
-                <col style={{ width: "11%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "16%" }} />
-              </colgroup>
-              <thead>
-                <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
-                    {advancedFilters.archived ? (
-                      <input
-                        type="checkbox"
-                        checked={isAllSelected()}
-                        onChange={toggleSelectAll}
-                        aria-label="Select all displayed archived items"
-                      />
-                    ) : (
-                      "#"
-                    )}
-                  </th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Photo</th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Description</th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Owner</th>
-                  <th
-                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
-                    onClick={() => toggleSort("createdAt")}
-                  >
-                    {advancedFilters.archived ? "Archived Date" : "Date"} {renderSortIcon("createdAt")}
-                  </th>
-                  <th
-                    className="text-center"
-                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
-                    onClick={() => toggleSort("penalty")}
-                  >
-                    Penalty {renderSortIcon("penalty")}
-                  </th>
-                  <th
-                    className="text-center"
-                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
-                    onClick={() => toggleSort("status")}
-                  >
-                    Status {renderSortIcon("status")}
-                  </th>
-                  
-                  <th
-                    className="text-center"
-                    style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((i, idx) => (
-                  <tr key={i._id}>
-
-                    {/* INDEX OR CHECKBOX */}
-                    <td>
-                      {advancedFilters.archived ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedArchivedIds.includes(i._id)}
-                          onChange={() => toggleSelectArchived(i._id)}
-                          aria-label={`Select archived item ${i.description}`}
-                        />
-                      ) : (
-                        idx + 1
-                      )}
-                    </td>
-
-                    {/* PHOTO */}
-                    <td>
-                      <img
-                        src={i.photoUrl}
-                        alt=""
-                        style={{ width: 50, height: 50, objectFit: "cover" }}
-                        className="rounded"
-                      />
-                    </td>
-
-                    {/* DESCRIPTION */}
-                    <td>
-                      {editingItemId === i._id ? (
-                        <input
-                          className="form-control form-control-sm"
-                          value={editedItem.description}
-                          onChange={(e) =>
-                            setEditedItem({ ...editedItem, description: e.target.value })
-                          }
-                        />
-                      ) : (
-                        i.description
-                      )}
-                    </td>
-
-                    {/* OWNER */}
-                    <td>
-                      {editingItemId === i._id ? (
-                        <div className="d-flex gap-1">
+            <>
+              {/* Desktop table (md+) */}
+              <div className="d-none d-md-block">
+                <table className="table mb-0 align-middle">
+                  <colgroup>
+                    <col style={{ width: "4%" }} />
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "25%" }} />
+                    <col style={{ width: "19%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "16%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
+                        {advancedFilters.archived ? (
                           <input
-                            className="form-control form-control-sm"
-                            value={editedItem.firstname}
-                            placeholder="First"
-                            onChange={(e) =>
-                              setEditedItem({ ...editedItem, firstname: e.target.value })
-                            }
+                            type="checkbox"
+                            checked={isAllSelected()}
+                            onChange={toggleSelectAll}
+                            aria-label="Select all displayed archived items"
                           />
-                          <input
-                            className="form-control form-control-sm"
-                            value={editedItem.lastname}
-                            placeholder="Last"
-                            onChange={(e) =>
-                              setEditedItem({ ...editedItem, lastname: e.target.value })
-                            }
+                        ) : (
+                          "#"
+                        )}
+                      </th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Photo</th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Description</th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Owner</th>
+                      <th
+                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                        onClick={() => toggleSort("createdAt")}
+                      >
+                        {advancedFilters.archived ? "Archived Date" : "Date"} {renderSortIcon("createdAt")}
+                      </th>
+                      <th
+                        className="text-center"
+                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                        onClick={() => toggleSort("penalty")}
+                      >
+                        Penalty {renderSortIcon("penalty")}
+                      </th>
+                      <th
+                        className="text-center"
+                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                        onClick={() => toggleSort("status")}
+                      >
+                        Status {renderSortIcon("status")}
+                      </th>
+                      
+                      <th
+                        className="text-center"
+                        style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((i, idx) => (
+                      <tr key={i._id}>
+
+                        {/* INDEX OR CHECKBOX */}
+                        <td>
+                          {advancedFilters.archived ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedArchivedIds.includes(i._id)}
+                              onChange={() => toggleSelectArchived(i._id)}
+                              aria-label={`Select archived item ${i.description}`}
+                            />
+                          ) : (
+                            idx + 1
+                          )}
+                        </td>
+
+                        {/* PHOTO */}
+                        <td>
+                          <img
+                            src={i.photoUrl || ""}
+                            alt=""
+                            style={{ width: 50, height: 50, objectFit: "cover" }}
+                            className="rounded"
                           />
-                        </div>
-                      ) : (
-                        `${i.firstname} ${i.lastname}`
-                      )}
-                    </td>
+                        </td>
 
-                    {/* DATE */}
-                    <td>
-                      {editingItemId === i._id ? (
-                        <input
-                          type="date"
-                          className="form-control form-control-sm"
-                          value={editedItem.createdAt?.substring(0, 10)}
-                          onChange={(e) =>
-                            setEditedItem({
-                              ...editedItem,
-                              createdAt: new Date(e.target.value).toISOString(),
-                            })
-                          }
-                        />
-                      ) : (
-                        // show archivedAt when in archived mode and archivedAt exists
-                        new Date(advancedFilters.archived && i.archivedAt ? i.archivedAt : i.createdAt).toLocaleDateString()
-                      )}
-                    </td>
+                        {/* DESCRIPTION */}
+                        <td>
+                          {editingItemId === i._id ? (
+                            <input
+                              className="form-control form-control-sm"
+                              value={editedItem.description || ""}
+                              onChange={(e) =>
+                                setEditedItem({ ...editedItem, description: e.target.value })
+                              }
+                            />
+                          ) : (
+                            i.description
+                          )}
+                        </td>
 
-                    {/* PENALTY */}
-                    <td className="text-center" >
-                      {editingItemId === i._id ? (
-                        <input
-                          type="number"
-                          className="form-control form-control-sm"
-                          value={editedItem.penalty || 0}
-                          onChange={(e) =>
-                            setEditedItem({ ...editedItem, penalty: e.target.value })
-                          }
-                          
-                        />
-                      ) : (
-                        <small style={{ color: i.penalty > 0 ? "red" : "", fontWeight: i.penalty > 0 ? "bold" : "normal", padding: "2px 6px", }}>
-                          {i.penalty || 0}
-                        </small>
-                      )}
-                    </td>
-                    
-                    {/* STATUS */}
-                    <td className="text-center">
-                      {editingItemId === i._id ? (
-                        <select
-                          className="form-select form-select-sm"
-                          value={editedItem.status}
-                          onChange={(e) =>
-                            setEditedItem({ ...editedItem, status: e.target.value })
-                          }
-                        >
-                          <option value="Deposited">Deposited</option>
-                          <option value="Claimed">Claimed</option>
-                          <option value="Unclaimed">Unclaimed</option>
-                        </select>
-                      ) : (
-                        <span
-                          className="px-2 py-1 rounded small"
-                          style={{
-                            background:
-                              i.status === "Claimed"
-                                ? "#90EE90"
-                                : i.status === "Deposited"
-                                ? "#D4C9BE"
-                                : "#F08080",
-                            color: i.status === "Unclaimed" ? "#F1EFEC" : "",
-                          }}
-                        >
-                          {i.status}
-                        </span>
-                      )}
-                    </td>
+                        {/* OWNER */}
+                        <td>
+                          {editingItemId === i._id ? (
+                            <div className="d-flex gap-1">
+                              <input
+                                className="form-control form-control-sm"
+                                value={editedItem.firstname || ""}
+                                placeholder="First"
+                                onChange={(e) =>
+                                  setEditedItem({ ...editedItem, firstname: e.target.value })
+                                }
+                              />
+                              <input
+                                className="form-control form-control-sm"
+                                value={editedItem.lastname || ""}
+                                placeholder="Last"
+                                onChange={(e) =>
+                                  setEditedItem({ ...editedItem, lastname: e.target.value })
+                                }
+                              />
+                            </div>
+                          ) : (
+                            `${i.firstname || ""} ${i.lastname || ""}`
+                          )}
+                        </td>
 
-                    {/* ACTIONS */}
-                    <td className="text-center">
-                      {advancedFilters.archived ? (
-                        // Archived view: show Unarchive button for each row
-                        <div className="d-flex justify-content-center gap-2">
-                          <button
-                            className="btn btn-sm"
-                            style={{
-                              border: "1px solid #123458",
-                              color: "#123458",
-                            }}
-                            onClick={() => performUnarchive(i._id)}
-                          >
-                            Unarchive
-                          </button>
-                        </div>
-                      ) : editingItemId === i._id ? (
-                        <>
-                          <button
-                            className="btn btn-sm me-2"
-                            style={{ background: "#123458", color: "#F1EFEC" }}
-                            onClick={handleSave}
-                          >
-                            Save
-                          </button>
-                          <button
-                            className="btn btn-sm"
-                            style={{ border: "1px solid #D4C9BE" }}
-                            onClick={() => setEditingItemId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            className="btn btn-sm me-2"
-                            style={{ border: "1px solid #123458", color: "#123458" }}
-                            onClick={() => handleEditClick(i)}
-                          >
-                            Edit
-                          </button>
+                        {/* DATE */}
+                        <td>
+                          {editingItemId === i._id ? (
+                            <input
+                              type="date"
+                              className="form-control form-control-sm"
+                              value={(editedItem.createdAt || "").substring(0, 10)}
+                              onChange={(e) =>
+                                setEditedItem({
+                                  ...editedItem,
+                                  createdAt: new Date(e.target.value).toISOString(),
+                                })
+                              }
+                            />
+                          ) : (
+                            // show archivedAt when in archived mode and archivedAt exists
+                            new Date(advancedFilters.archived && i.archivedAt ? i.archivedAt : i.createdAt || 0).toLocaleDateString()
+                          )}
+                        </td>
 
-                          <button
-                            className="btn btn-sm me-2"
-                            style={{ border: "1px solid #F08080", color: "#F08080" }}
-                            onClick={() => {
-                              setArchiveItemId(i._id);
-                              setShowArchiveModal(true);
-                            }}
-                          >
-                            Archive
-                          </button>
-                          {i.status !== "Claimed" && (
-                            <button
-                              className="btn btn-sm "
-                              style={{ border: "1px solid green", color: "green" }}
-                              onClick={() => {
-                                setVerifyItemId(i._id);
-                                setShowVerifyModal(true);
+                        {/* PENALTY */}
+                        <td className="text-center" >
+                          {editingItemId === i._id ? (
+                            <input
+                              type="number"
+                              className="form-control form-control-sm"
+                              value={editedItem.penalty ?? 0}
+                              onChange={(e) =>
+                                setEditedItem({ ...editedItem, penalty: e.target.value })
+                              }
+                              
+                            />
+                          ) : (
+                            <small style={{ color: (i.penalty || 0) > 0 ? "red" : "", fontWeight: (i.penalty || 0) > 0 ? "bold" : "normal", padding: "2px 6px", }}>
+                              {i.penalty || 0}
+                            </small>
+                          )}
+                        </td>
+                        
+                        {/* STATUS */}
+                        <td className="text-center">
+                          {editingItemId === i._id ? (
+                            <select
+                              className="form-select form-select-sm"
+                              value={editedItem.status || "Deposited"}
+                              onChange={(e) =>
+                                setEditedItem({ ...editedItem, status: e.target.value })
+                              }
+                            >
+                              <option value="Deposited">Deposited</option>
+                              <option value="Claimed">Claimed</option>
+                              <option value="Unclaimed">Unclaimed</option>
+                            </select>
+                          ) : (
+                            <span
+                              className="px-2 py-1 rounded small"
+                              style={{
+                                background:
+                                  i.status === "Claimed"
+                                    ? "#90EE90"
+                                    : i.status === "Deposited"
+                                    ? "#D4C9BE"
+                                    : "#F08080",
+                                color: i.status === "Unclaimed" ? "#F1EFEC" : "",
                               }}
                             >
-                              Verify
-                            </button>
+                              {i.status}
+                            </span>
                           )}
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        </td>
+
+                        {/* ACTIONS */}
+                        <td className="text-center">
+                          {advancedFilters.archived ? (
+                            // Archived view: show Unarchive button for each row
+                            <div className="d-flex justify-content-center gap-2">
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  border: "1px solid #123458",
+                                  color: "#123458",
+                                }}
+                                onClick={() => performUnarchive(i._id)}
+                              >
+                                Unarchive
+                              </button>
+                            </div>
+                          ) : editingItemId === i._id ? (
+                            <>
+                              <button
+                                className="btn btn-sm me-2"
+                                style={{ background: "#123458", color: "#F1EFEC" }}
+                                onClick={handleSave}
+                              >
+                                Save
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                style={{ border: "1px solid #D4C9BE" }}
+                                onClick={() => setEditingItemId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="btn btn-sm me-2"
+                                style={{ border: "1px solid #123458", color: "#123458" }}
+                                onClick={() => handleEditClick(i)}
+                              >
+                                Edit
+                              </button>
+
+                              <button
+                                className="btn btn-sm me-2"
+                                style={{ border: "1px solid #F08080", color: "#F08080" }}
+                                onClick={() => {
+                                  setArchiveItemId(i._id);
+                                  setShowArchiveModal(true);
+                                }}
+                              >
+                                Archive
+                              </button>
+                              {i.status !== "Claimed" && (
+                                <button
+                                  className="btn btn-sm "
+                                  style={{ border: "1px solid green", color: "green" }}
+                                  onClick={() => {
+                                    setVerifyItemId(i._id);
+                                    setShowVerifyModal(true);
+                                  }}
+                                >
+                                  Verify
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile list (below md): stacked cards */}
+              <div className="d-block d-md-none p-2">
+                {filteredItems.length === 0 && <p className="text-center p-2">No items found.</p>}
+                {filteredItems.map((i, idx) => {
+                  const isEditing = editingItemId === i._id;
+                  return (
+                    <div key={i._id} className="card mb-2">
+                      <div className="card-body p-2">
+                        <div className="d-flex align-items-start gap-2">
+                          <img
+                            src={i.photoUrl || ""}
+                            alt=""
+                            style={{ width: 64, height: 64, objectFit: "cover" }}
+                            className="rounded"
+                          />
+                          <div className="flex-grow-1">
+                            <div className="d-flex justify-content-between align-items-start">
+                              <div>
+                                <strong className="d-block">{i.description}</strong>
+                                <small className="text-muted">{i.firstname || ""} {i.lastname || ""}</small>
+                              </div>
+                              <div className="text-end">
+                                <small className="text-muted">
+                                  {new Date(advancedFilters.archived && i.archivedAt ? i.archivedAt : i.createdAt || 0).toLocaleDateString()}
+                                </small>
+                                <div className="mt-1">
+                                  {advancedFilters.archived ? (
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedArchivedIds.includes(i._id)}
+                                      onChange={() => toggleSelectArchived(i._id)}
+                                      aria-label={`Select archived item ${i.description}`}
+                                    />
+                                  ) : (
+                                    <small className="text-muted">#{idx + 1}</small>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="d-flex gap-2 align-items-center mt-2 flex-wrap">
+                              <small className="px-2 py-1 rounded small border">
+                                Penalty: {i.penalty || 0}
+                              </small>
+
+                              <span
+                                className="px-2 py-1 rounded small"
+                                style={{
+                                  background:
+                                    i.status === "Claimed"
+                                      ? "#90EE90"
+                                      : i.status === "Deposited"
+                                      ? "#D4C9BE"
+                                      : "#F08080",
+                                  color: i.status === "Unclaimed" ? "#F1EFEC" : "",
+                                }}
+                              >
+                                {i.status}
+                              </span>
+
+                              <div className="ms-auto d-flex gap-1">
+                                {advancedFilters.archived ? (
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{
+                                      border: "1px solid #123458",
+                                      color: "#123458",
+                                    }}
+                                    onClick={() => performUnarchive(i._id)}
+                                  >
+                                    Unarchive
+                                  </button>
+                                ) : isEditing ? (
+                                  <>
+                                    <button
+                                      className="btn btn-sm"
+                                      style={{ background: "#123458", color: "#fff" }}
+                                      onClick={handleSave}
+                                    >
+                                      Save
+                                    </button>
+                                    <button className="btn btn-sm border" onClick={() => setEditingItemId(null)}>
+                                      Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      className="btn btn-sm"
+                                      style={{ border: "1px solid #123458", color: "#123458" }}
+                                      onClick={() => handleEditClick(i)}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="btn btn-sm"
+                                      style={{ border: "1px solid #F08080", color: "#F08080" }}
+                                      onClick={() => {
+                                        setArchiveItemId(i._id);
+                                        setShowArchiveModal(true);
+                                      }}
+                                    >
+                                      Archive
+                                    </button>
+                                    {i.status !== "Claimed" && (
+                                      <button
+                                        className="btn btn-sm"
+                                        style={{ border: "1px solid green", color: "green" }}
+                                        onClick={() => {
+                                          setVerifyItemId(i._id);
+                                          setShowVerifyModal(true);
+                                        }}
+                                      >
+                                        Verify
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Inline edit fields on mobile */}
+                            {isEditing && (
+                              <div className="mt-2">
+                                <div className="mb-1">
+                                  <input
+                                    className="form-control form-control-sm"
+                                    value={editedItem.description || ""}
+                                    onChange={(e) =>
+                                      setEditedItem((prev) => ({ ...prev, description: e.target.value }))
+                                    }
+                                    placeholder="Description"
+                                  />
+                                </div>
+                                <div className="mb-1 d-flex gap-1">
+                                  <input
+                                    className="form-control form-control-sm"
+                                    value={editedItem.firstname || ""}
+                                    onChange={(e) => setEditedItem((prev) => ({ ...prev, firstname: e.target.value }))}
+                                    placeholder="First name"
+                                  />
+                                  <input
+                                    className="form-control form-control-sm"
+                                    value={editedItem.lastname || ""}
+                                    onChange={(e) => setEditedItem((prev) => ({ ...prev, lastname: e.target.value }))}
+                                    placeholder="Last name"
+                                  />
+                                </div>
+                                <div className="mb-1">
+                                  <input
+                                    type="number"
+                                    className="form-control form-control-sm"
+                                    value={editedItem.penalty ?? 0}
+                                    onChange={(e) => setEditedItem((prev) => ({ ...prev, penalty: e.target.value }))}
+                                    placeholder="Penalty"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 

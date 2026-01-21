@@ -1,5 +1,8 @@
 const express = require("express");
 const multer = require("multer");
+const authMiddleware = require("../middleware/authMiddleware");
+const authorizeRoles = require("../middleware/roleMiddleware");
+
 const {
   uploadItem, getItems, getItemPhoto, updateItemAction, unarchiveItem,
   updateItemStatus, getItemSummary, updateItem, deleteItem,
@@ -7,23 +10,29 @@ const {
 
 const router = express.Router();
 
-// Multer config (store file in memory, then save to MongoDB)
+// Multer config
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Routes CRUD for user
-router.post("/upload", upload.single("photo"), uploadItem); // Create
-router.get("/items", getItems); // Read
-router.get("/items/:id/photo", getItemPhoto);
-router.patch("/items/:id/action", updateItemAction); // Update
-router.patch("/items/:id/unarchive", unarchiveItem); // Unarchive
-router.put("/items/:id/status", updateItemStatus); 
+// ------------------- User Routes -------------------
+// Users, Guards, Admins can upload items
+router.post("/upload", authMiddleware, authorizeRoles("user", "guard", "admin"), upload.single("photo"), uploadItem);
+router.get("/items", authMiddleware, authorizeRoles("user", "guard", "admin"), getItems);
+router.get("/items/:id/photo", authMiddleware, authorizeRoles("user", "guard", "admin"), getItemPhoto);
+router.patch("/items/:id/action", authMiddleware, authorizeRoles("user", "guard", "admin"), updateItemAction);
+router.patch("/items/:id/unarchive", authMiddleware, authorizeRoles("user", "guard", "admin"), unarchiveItem);
 
-// Routes CRUD for guard
-router.get("/items/summary", getItemSummary);
+// ------------------- Guard Routes -------------------
+// Only guards and admins can update actions/status
+router.put("/items/:id/status", authMiddleware, authorizeRoles("user", "guard", "admin"), updateItemStatus);
 
-// Routes for Admin
-router.put("/items/:id", updateItem);
-router.delete("/items/:id", deleteItem);
+// ------------------- Guard/Admin -------------------
+// Guard/Admin summary view
+router.get("/items/summary", authMiddleware, authorizeRoles("guard", "admin"), getItemSummary);
+
+// ------------------- Admin Routes -------------------
+// Only admin can update/delete items
+router.put("/items/:id", authMiddleware, authorizeRoles("admin"), updateItem);
+router.delete("/items/:id", authMiddleware, authorizeRoles("admin"), deleteItem);
 
 module.exports = router;

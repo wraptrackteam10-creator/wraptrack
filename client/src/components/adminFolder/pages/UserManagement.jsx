@@ -5,6 +5,14 @@ import { BsSearch } from "react-icons/bs";
 import { CiFilter } from "react-icons/ci";
 import { TiArrowUnsorted } from "react-icons/ti";
 import { FaSortUp, FaSortDown } from "react-icons/fa6";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
+
+/**
+ * Responsive UserManagement:
+ * - Desktop (md+): table view (unchanged visually).
+ * - Mobile (below md): stacked card list with the same actions.
+ * - Header controls wrap and stretch on small screens for usability.
+ */
 
 function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -56,7 +64,7 @@ function UserManagement() {
           ? `${API_BASE_URL}/api/users?archived=true`
           : `${API_BASE_URL}/api/users`;
 
-        const res = await fetch(url);
+        const res = await fetchWithAuth(url, { credentials: "include" });
         const data = await res.json();
 
         if (isMounted) {
@@ -133,7 +141,7 @@ function UserManagement() {
   };
 
   const handleSave = async () => {
-    const { username, email, type } = editedUser.userCredentials;
+    const { username, email, type } = editedUser.userCredentials || {};
 
     if (!isValidUsername(username, type)) {
       showToast(
@@ -150,11 +158,12 @@ function UserManagement() {
     }
 
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE_URL}/api/users/${editedUser._id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify(editedUser),
         }
       );
@@ -182,8 +191,9 @@ function UserManagement() {
   const performArchive = async () => {
     if (!userToArchive) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users/${userToArchive}/archive`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/users/${userToArchive}/archive`, {
         method: "PATCH",
+        credentials: "include",
       });
       if (!res.ok) {
         const err = await res.json();
@@ -211,8 +221,9 @@ function UserManagement() {
   // unarchive a single user
   const performUnarchive = async (id) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users/${id}/unarchive`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/users/${id}/unarchive`, {
         method: "PATCH",
+        credentials: "include",
       });
       if (!res.ok) {
         const err = await res.json();
@@ -235,7 +246,9 @@ function UserManagement() {
     try {
       const results = await Promise.all(
         ids.map((id) =>
-          fetch(`${API_BASE_URL}/api/users/${id}/unarchive`, { method: "PATCH" }).then(async (res) => {
+          fetchWithAuth(`${API_BASE_URL}/api/users/${id}/unarchive`, { 
+            method: "PATCH", credentials: "include" 
+          }).then(async (res) => {
             if (!res.ok) {
               const err = await res.json();
               return { id, ok: false, error: err.error || "Unarchive failed" };
@@ -481,22 +494,22 @@ function UserManagement() {
     <div className="container-fluid p-2">
       {/* PAGE HEADER */}
       <div
-        className="d-flex justify-content-between mb-2 p-3 rounded"
+        className="d-flex justify-content-between mb-2 p-3 rounded flex-wrap"
         style={{ background: "#FFF", border: "1px solid #D4C9BE" }}
       >
-        <div>
+        <div className="me-2 flex-grow-1" style={{ minWidth: 220 }}>
           <h4 className="fw-semibold mb-1">User Account Management</h4>
           <small style={{ color: "#6b6b6b" }}>
             Manage, edit, and monitor all user accounts
           </small>
         </div>
 
-        <div className="d-flex gap-2 align-items-center">
+        <div className="d-flex gap-2 align-items-center mt-2 mt-md-0 flex-wrap">
           {/* Date filter */}
           <input
             type="date"
             className="form-control"
-            style={{ maxWidth: 150, height: "37px", border: "1px solid #D4C9BE"}}
+            style={{ maxWidth: 160, height: "37px", border: "1px solid #D4C9BE" }}
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
             aria-label="Filter by date"
@@ -534,7 +547,7 @@ function UserManagement() {
           </button>
 
           {/* Search */}
-          <div style={{ position: "relative", width: 240}}>
+          <div style={{ position: "relative", minWidth: 180, maxWidth: 300 }} className="ms-0 ms-md-0">
             <BsSearch
               style={{
                 position: "absolute",
@@ -548,7 +561,7 @@ function UserManagement() {
             <input
               className="form-control"
               placeholder="Search user"
-              style={{ maxWidth: 240, border: "1px solid #D4C9BE", height: "37px", paddingLeft: "32px",}}
+              style={{ width: "100%", border: "1px solid #D4C9BE", height: "37px", paddingLeft: "32px" }}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search users by name"
@@ -557,7 +570,7 @@ function UserManagement() {
         </div>
       </div>
 
-      {/* TABLE CARD */}
+      {/* TABLE CARD (responsive) */}
       <div className="rounded" style={{ background: "#fff", border: "1px solid #D4C9BE" }}>
         <div className="px-3 py-2 fw-semibold border-bottom d-flex justify-content-between align-items-center">
           <div>User Accounts Overview</div>
@@ -583,279 +596,445 @@ function UserManagement() {
           </div>
         </div>
 
-        <div className="d-flex flex-column flex-grow-1">
+        <div className="d-flex flex-column flex-grow-1 p-2">
           {loading ? (
             <p className="text-center p-3">Loading users…</p>
           ) : (
-            <table className="table mb-0 align-middle">
-              <colgroup>
-                <col style={{ width: "4%" }} />   {/* # OR checkbox */}
-                <col style={{ width: "20%" }} />  {/* Full Name */}
-                <col style={{ width: "12%" }} />  {/* Username */}
-                <col style={{ width: "24%" }} />  {/* Email */}
-                <col style={{ width: "12%" }} />   {/* Date */}
-                <col style={{ width: "8%" }} />   {/* Type */}  
-                <col style={{ width: "8%" }} />   {/* Status */}
-                <col style={{ width: "20%" }} />  {/* Actions */}
-              </colgroup>
-              <thead>
-                <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
-                    {userAdvancedFilters.archived ? (
-                      <input
-                        type="checkbox"
-                        checked={isAllSelected()}
-                        onChange={toggleSelectAll}
-                        aria-label="Select all displayed archived users"
-                      />
-                    ) : (
-                      "#"
-                    )}
-                  </th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Full Name</th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Login ID</th>
-                  <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Email</th>
-                  <th
-                    onClick={() => toggleSort("date")}
-                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
-                  >
-                    {userAdvancedFilters.archived ? "Archived Date" : "Date"} {renderSortIcon("createdAt")}
-                  </th>
-                  <th
-                    onClick={() => toggleSort("type")}
-                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
-                  >
-                    Type {renderSortIcon("type")}
-                  </th>
-
-                  <th
-                    className="text-center"
-                    onClick={() => toggleSort("status")}
-                    style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
-                  >
-                    Status {renderSortIcon("status")}
-                  </th>
-
-                  <th
-                    className="text-center"
-                    style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedUsers.map((u, i) => (
-                  <tr key={u._id}>
-                    <td>
-                      {userAdvancedFilters.archived ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedArchivedIds.includes(u._id)}
-                          onChange={() => toggleSelectArchived(u._id)}
-                          aria-label={`Select archived user ${u.firstname} ${u.lastname}`}
-                        />
-                      ) : (
-                        i + 1
-                      )}
-                    </td>
-
-                    {/* FULL NAME */}
-                    <td>
-                      {editingUserId === u._id ? (
-                        <div className="d-flex gap-1">
+            <>
+              {/* Desktop table (md+) */}
+              <div className="d-none d-md-block">
+                <table className="table mb-0 align-middle">
+                  <colgroup>
+                    <col style={{ width: "4%" }} />   {/* # OR checkbox */}
+                    <col style={{ width: "20%" }} />  {/* Full Name */}
+                    <col style={{ width: "12%" }} />  {/* Username */}
+                    <col style={{ width: "24%" }} />  {/* Email */}
+                    <col style={{ width: "12%" }} />   {/* Date */}
+                    <col style={{ width: "8%" }} />   {/* Type */}
+                    <col style={{ width: "8%" }} />   {/* Status */}
+                    <col style={{ width: "20%" }} />  {/* Actions */}
+                  </colgroup>
+                  <thead>
+                    <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
+                        {userAdvancedFilters.archived ? (
                           <input
-                            className="form-control form-control-sm"
-                            placeholder="First name"
-                            value={editedUser.firstname}
-                            onChange={(e) =>
-                              setEditedUser((prev) => ({
-                                ...prev,
-                                firstname: e.target.value,
-                              }))
-                            }
+                            type="checkbox"
+                            checked={isAllSelected()}
+                            onChange={toggleSelectAll}
+                            aria-label="Select all displayed archived users"
                           />
-                          <input
-                            className="form-control form-control-sm"
-                            placeholder="Last name"
-                            value={editedUser.lastname}
-                            onChange={(e) =>
-                              setEditedUser((prev) => ({
-                                ...prev,
-                                lastname: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                      ) : (
-                        `${u.firstname} ${u.lastname}`
-                      )}
-                    </td>
-
-                    {/* USERNAME */}
-                    <td>
-                      {editingUserId === u._id ? (
-                        <input
-                          className="form-control form-control-sm"
-                          value={editedUser.userCredentials.username}
-                          onChange={(e) =>
-                            handleCredChange("username", e.target.value)
-                          }
-                        />
-                      ) : (
-                        u.userCredentials.username
-                      )}
-                    </td>
-
-                    {/* EMAIL */}
-                    <td>
-                      {editingUserId === u._id ? (
-                        <input
-                          type="email"
-                          className="form-control form-control-sm"
-                          value={editedUser.userCredentials.email}
-                          onChange={(e) =>
-                            handleCredChange("email", e.target.value)
-                          }
-                        />
-                      ) : (
-                        u.userCredentials.email
-                      )}
-                    </td>
-
-                    {/* DATE */}
-                    <td>
-                      <small className="text-muted">
-                        {formatDate(
-                          userAdvancedFilters.archived && u.archivedAt
-                            ? u.archivedAt
-                            : u.createdAt || u.registeredAt || u.updatedAt
+                        ) : (
+                          "#"
                         )}
-                      </small>
-                    </td>
+                      </th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Full Name</th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Login ID</th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Email</th>
+                      <th
+                        onClick={() => toggleSort("date")}
+                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                      >
+                        {userAdvancedFilters.archived ? "Archived Date" : "Date"} {renderSortIcon("createdAt")}
+                      </th>
+                      <th
+                        onClick={() => toggleSort("type")}
+                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                      >
+                        Type {renderSortIcon("type")}
+                      </th>
 
-                    {/* TYPE */}
-                    <td>
-                      {editingUserId === u._id && u.userCredentials.type !== "admin" && u.userCredentials.type !== "guard" ? (
-                        <select
-                          className="form-select form-select-sm"
-                          value={editedUser.userCredentials.type}
-                          onChange={(e) =>
-                            handleCredChange("type", e.target.value)
-                          }
-                        >
-                          <option value="student">student</option>
-                          <option value="faculty">faculty</option>
-                          <option value="visitor">visitor</option>
-                        </select>
-                      ) : (
-                        <span className="px-2 py-1 rounded small border">
-                          {u.userCredentials.type === "student"
-                            ? "Student"
-                            : u.userCredentials.type === "faculty"
-                            ? "Faculty"
-                            : u.userCredentials.type === "guard"
-                            ? "Guard"
-                            : u.userCredentials.type === "admin"
-                            ? "Admin"
-                            : "Visitor"}
-                        </span>
-                      )}
-                    </td>
+                      <th
+                        className="text-center"
+                        onClick={() => toggleSort("status")}
+                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                      >
+                        Status {renderSortIcon("status")}
+                      </th>
 
-                    {/* STATUS */}
-                    <td className="text-center">
-                      {editingUserId === u._id ? (
-                        <select
-                          className="form-select form-select-sm"
-                          value={editedUser.userCredentials.status}
-                          onChange={(e) =>
-                            handleCredChange("status", e.target.value)
-                          }
-                        >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
-                        </select>
-                      ) : (
-                        <span
-                          className="px-2 py-1 rounded small"
-                          style={{
-                            background:
-                              u.userCredentials.status === "Active"
-                                ? "#90EE90"
-                                : "#D4C9BE",
-                          }}
-                        >
-                          {u.userCredentials.status}
-                        </span>
-                      )}
-                    </td>
+                      <th
+                        className="text-center"
+                        style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedUsers.map((u, i) => (
+                      <tr key={u._id}>
+                        <td>
+                          {userAdvancedFilters.archived ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedArchivedIds.includes(u._id)}
+                              onChange={() => toggleSelectArchived(u._id)}
+                              aria-label={`Select archived user ${u.firstname} ${u.lastname}`}
+                            />
+                          ) : (
+                            i + 1
+                          )}
+                        </td>
 
-                    {/* ACTIONS */}
-                    <td className="text-center">
-                      {userAdvancedFilters.archived ? (
-                        // Archived view: show Unarchive button for each row
-                        <div className="d-flex justify-content-center gap-2">
-                          <button
-                            className="btn btn-sm"
-                            style={{
-                              border: "1px solid #123458",
-                              color: "#123458",
-                            }}
-                            onClick={() => performUnarchive(u._id)}
-                          >
-                            Unarchive
-                          </button>
+                        {/* FULL NAME */}
+                        <td>
+                          {editingUserId === u._id ? (
+                            <div className="d-flex gap-1">
+                              <input
+                                className="form-control form-control-sm"
+                                placeholder="First name"
+                                value={editedUser.firstname || ""}
+                                onChange={(e) =>
+                                  setEditedUser((prev) => ({
+                                    ...prev,
+                                    firstname: e.target.value,
+                                  }))
+                                }
+                              />
+                              <input
+                                className="form-control form-control-sm"
+                                placeholder="Last name"
+                                value={editedUser.lastname || ""}
+                                onChange={(e) =>
+                                  setEditedUser((prev) => ({
+                                    ...prev,
+                                    lastname: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          ) : (
+                            `${u.firstname} ${u.lastname}`
+                          )}
+                        </td>
+
+                        {/* USERNAME */}
+                        <td>
+                          {editingUserId === u._id ? (
+                            <input
+                              className="form-control form-control-sm"
+                              value={editedUser.userCredentials?.username || ""}
+                              onChange={(e) =>
+                                handleCredChange("username", e.target.value)
+                              }
+                            />
+                          ) : (
+                            u.userCredentials?.username || ""
+                          )}
+                        </td>
+
+                        {/* EMAIL */}
+                        <td>
+                          {editingUserId === u._id ? (
+                            <input
+                              type="email"
+                              className="form-control form-control-sm"
+                              value={editedUser.userCredentials?.email || ""}
+                              onChange={(e) =>
+                                handleCredChange("email", e.target.value)
+                              }
+                            />
+                          ) : (
+                            u.userCredentials?.email || ""
+                          )}
+                        </td>
+
+                        {/* DATE */}
+                        <td>
+                          <small className="text-muted">
+                            {formatDate(
+                              userAdvancedFilters.archived && u.archivedAt
+                                ? u.archivedAt
+                                : u.createdAt || u.registeredAt || u.updatedAt
+                            )}
+                          </small>
+                        </td>
+
+                        {/* TYPE */}
+                        <td>
+                          {editingUserId === u._id && u.userCredentials?.type !== "admin" && u.userCredentials?.type !== "guard" ? (
+                            <select
+                              className="form-select form-select-sm"
+                              value={editedUser.userCredentials?.type || ""}
+                              onChange={(e) =>
+                                handleCredChange("type", e.target.value)
+                              }
+                            >
+                              <option value="student">student</option>
+                              <option value="faculty">faculty</option>
+                              <option value="visitor">visitor</option>
+                            </select>
+                          ) : (
+                            <span className="px-2 py-1 rounded small border">
+                              {u.userCredentials?.type === "student"
+                                ? "Student"
+                                : u.userCredentials?.type === "faculty"
+                                ? "Faculty"
+                                : u.userCredentials?.type === "guard"
+                                ? "Guard"
+                                : u.userCredentials?.type === "admin"
+                                ? "Admin"
+                                : "Visitor"}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* STATUS */}
+                        <td className="text-center">
+                          {editingUserId === u._id ? (
+                            <select
+                              className="form-select form-select-sm"
+                              value={editedUser.userCredentials?.status || "Active"}
+                              onChange={(e) =>
+                                handleCredChange("status", e.target.value)
+                              }
+                            >
+                              <option value="Active">Active</option>
+                              <option value="Inactive">Inactive</option>
+                            </select>
+                          ) : (
+                            <span
+                              className="px-2 py-1 rounded small"
+                              style={{
+                                background:
+                                  u.userCredentials?.status === "Active"
+                                    ? "#90EE90"
+                                    : "#D4C9BE",
+                              }}
+                            >
+                              {u.userCredentials?.status || ""}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* ACTIONS */}
+                        <td className="text-center">
+                          {userAdvancedFilters.archived ? (
+                            // Archived view: show Unarchive button for each row
+                            <div className="d-flex justify-content-center gap-2">
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  border: "1px solid #123458",
+                                  color: "#123458",
+                                }}
+                                onClick={() => performUnarchive(u._id)}
+                              >
+                                Unarchive
+                              </button>
+                            </div>
+                          ) : editingUserId === u._id ? (
+                            <>
+                              <button
+                                className="btn btn-sm me-2"
+                                style={{
+                                  background: "#123458",
+                                  color: "#F1EFEC",
+                                }}
+                                onClick={handleSave}
+                              >
+                                Save
+                              </button>
+                              <button
+                                className="btn btn-sm border"
+                                onClick={() => setEditingUserId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="btn btn-sm me-2"
+                                style={{
+                                  border: "1px solid #123458",
+                                  color: "#123458",
+                                }}
+                                onClick={() => handleEditClick(u)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  border: "1px solid #F08080",
+                                  color: "#F08080",
+                                }}
+                                onClick={() => handleArchive(u._id)}
+                                disabled={u.userCredentials?.type === "admin"}
+                              >
+                                Archive
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile list (below md): stacked cards */}
+              <div className="d-block d-md-none">
+                {sortedUsers.length === 0 && <p className="text-center p-2">No users found.</p>}
+                {sortedUsers.map((u, idx) => {
+                  const creds = u.userCredentials || {};
+                  const isEditing = editingUserId === u._id;
+                  return (
+                    <div key={u._id} className="card mb-2">
+                      <div className="card-body p-2">
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div>
+                            <strong>{u.firstname} {u.lastname}</strong>
+                            <div className="small text-muted">
+                              {creds.username || ""} • {creds.email || ""}
+                            </div>
+                          </div>
+
+                          <div className="text-end small">
+                            <div>{formatDate(
+                              userAdvancedFilters.archived && u.archivedAt
+                                ? u.archivedAt
+                                : u.createdAt || u.registeredAt || u.updatedAt
+                            )}</div>
+                            <div className="mt-1">
+                              {userAdvancedFilters.archived ? (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedArchivedIds.includes(u._id)}
+                                  onChange={() => toggleSelectArchived(u._id)}
+                                  aria-label={`Select archived user ${u.firstname} ${u.lastname}`}
+                                />
+                              ) : (
+                                <span className="text-muted">#{idx + 1}</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      ) : editingUserId === u._id ? (
-                        <>
-                          <button
-                            className="btn btn-sm me-2"
+
+                        <div className="d-flex gap-2 flex-wrap align-items-center mt-2">
+                          <span className="px-2 py-1 rounded small border">
+                            {creds.type === "student"
+                              ? "Student"
+                              : creds.type === "faculty"
+                              ? "Faculty"
+                              : creds.type === "guard"
+                              ? "Guard"
+                              : creds.type === "admin"
+                              ? "Admin"
+                              : "Visitor"}
+                          </span>
+
+                          <span
+                            className="px-2 py-1 rounded small"
                             style={{
-                              background: "#123458",
-                              color: "#F1EFEC",
+                              background: creds.status === "Active" ? "#90EE90" : "#D4C9BE",
                             }}
-                            onClick={handleSave}
                           >
-                            Save
-                          </button>
-                          <button
-                            className="btn btn-sm border"
-                            onClick={() => setEditingUserId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            className="btn btn-sm me-2"
-                            style={{
-                              border: "1px solid #123458",
-                              color: "#123458",
-                            }}
-                            onClick={() => handleEditClick(u)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="btn btn-sm"
-                            style={{
-                              border: "1px solid #F08080",
-                              color: "#F08080",
-                            }}
-                            onClick={() => handleArchive(u._id)}
-                            disabled={u.userCredentials.type === "admin"}
-                          >
-                            Archive
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                            {creds.status || ""}
+                          </span>
+
+                          <div className="ms-auto d-flex gap-1">
+                            {userAdvancedFilters.archived ? (
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  border: "1px solid #123458",
+                                  color: "#123458",
+                                }}
+                                onClick={() => performUnarchive(u._id)}
+                              >
+                                Unarchive
+                              </button>
+                            ) : isEditing ? (
+                              <>
+                                <button
+                                  className="btn btn-sm"
+                                  style={{ background: "#123458", color: "#fff" }}
+                                  onClick={handleSave}
+                                >
+                                  Save
+                                </button>
+                                <button className="btn btn-sm border" onClick={() => setEditingUserId(null)}>
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className="btn btn-sm"
+                                  style={{ border: "1px solid #123458", color: "#123458" }}
+                                  onClick={() => handleEditClick(u)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn btn-sm"
+                                  style={{ border: "1px solid #F08080", color: "#F08080" }}
+                                  onClick={() => handleArchive(u._id)}
+                                  disabled={creds.type === "admin"}
+                                >
+                                  Archive
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inline edit fields on mobile */}
+                        {isEditing && (
+                          <div className="mt-2">
+                            <div className="mb-1">
+                              <input
+                                className="form-control form-control-sm"
+                                placeholder="First name"
+                                value={editedUser.firstname || ""}
+                                onChange={(e) =>
+                                  setEditedUser((prev) => ({
+                                    ...prev,
+                                    firstname: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="mb-1">
+                              <input
+                                className="form-control form-control-sm"
+                                placeholder="Last name"
+                                value={editedUser.lastname || ""}
+                                onChange={(e) =>
+                                  setEditedUser((prev) => ({
+                                    ...prev,
+                                    lastname: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="mb-1">
+                              <input
+                                className="form-control form-control-sm"
+                                value={editedUser.userCredentials?.username || ""}
+                                onChange={(e) => handleCredChange("username", e.target.value)}
+                                placeholder="Login ID"
+                              />
+                            </div>
+                            <div className="mb-1">
+                              <input
+                                className="form-control form-control-sm"
+                                value={editedUser.userCredentials?.email || ""}
+                                onChange={(e) => handleCredChange("email", e.target.value)}
+                                placeholder="Email"
+                                type="email"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 

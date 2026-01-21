@@ -2,6 +2,7 @@ import logo from "../../images/wtlogo-removebg.png";
 import institutes from "../../data/institutes";
 import { useState, useRef, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import bgImage from "../../images/landing-bg.png";
 
 function Signup() {
   const navigate = useNavigate();
@@ -326,9 +327,16 @@ function Signup() {
     <div
       ref={scrollContainerRef}
       className="signup-page"
-      style={{ minHeight: "100vh", padding: "20px", backgroundColor: "#F1EFEC", overflowY: "auto" }}
+      style={{
+        backgroundImage: `url(${bgImage})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        minHeight: "100vh",
+        padding: "20px",
+      }}
     >
-      <div className="card signup-card shadow-lg border-0 p-4 rounded-3" style={{ width: "100%", maxWidth: "640px", margin: "0 auto" }}>
+      <div className="card signup-card shadow-lg border-0 p-4 rounded-3" style={{ width: "100%", maxWidth: "640px", margin: "0 auto", marginTop: "50px" }}>
         <form onSubmit={handleSubmit}>
           <div className="mb-4 text-center">
             <img src={logo} alt="logo" style={{ width: "100px" }} />
@@ -419,7 +427,7 @@ function Signup() {
               <input
                 ref={usernameRef}
                 type="text"
-                placeholder={role === "Student" ? "Student ID (0000-0000)" : "Faculty ID (no strict format)"}
+                placeholder={role === "Student" ? "Student ID (0000-0000)" : "Username"}
                 className="form-control mb-3"
                 value={username}
                 required

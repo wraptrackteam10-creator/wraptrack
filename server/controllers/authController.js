@@ -256,9 +256,15 @@ const login = async (req, res) => {
 
     const accessToken = generateAccessToken(user);
 
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: false, // Set to true in production with HTTPS
+      sameSite: "lax",
+      maxAge: 15 * 60 * 1000, // 15 min
+    });
+
     return res.status(200).json({
       message: "Login successful",
-      accessToken,
       user: {
         id: user._id,
         firstname: user.firstname,
@@ -275,4 +281,14 @@ const login = async (req, res) => {
   }
 };
 
-module.exports = { signup, verifyOtp, resendOtp, login, cleanupExpiredTempSignups };
+const logout = (req, res) => {
+  res.clearCookie("accessToken", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: false, // true in HTTPS production
+  });
+
+  return res.status(200).json({ message: "Logged out successfully" });
+};
+
+module.exports = { signup, verifyOtp, resendOtp, login, logout, cleanupExpiredTempSignups };

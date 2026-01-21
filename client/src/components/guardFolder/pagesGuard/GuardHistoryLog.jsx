@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import { BsSearch } from "react-icons/bs";
 import "react-datepicker/dist/react-datepicker.css";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function GuardHistoryLog() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ function GuardHistoryLog() {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/guardlogs`);
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/guardlogs`);
         if (!response.ok) throw new Error("Failed to fetch guard logs");
         const data = await response.json();
         setLogs(data);

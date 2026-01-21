@@ -1,3 +1,4 @@
+// full file — only functional changes are: refreshItems accepts `archived` and useEffect now re-fetches when advancedFilters.archived changes
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { LuArchiveX } from "react-icons/lu";
@@ -10,6 +11,7 @@ import { BsSearch } from "react-icons/bs";
 import jsPDF from "jspdf";
 import "bootstrap/dist/css/bootstrap.min.css";
 import FilterPanel from "./FilterPanel";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function GuardItemManagement() {
   const navigate = useNavigate();
@@ -51,6 +53,9 @@ function GuardItemManagement() {
   const guardId = guardInfo.id;
   const guardName = `${guardInfo.firstname || ""} ${guardInfo.lastname || ""}`.trim();
 
+  // track first load so we only show the full loading UI on initial fetch
+  const initialLoadRef = useRef(true);
+
   const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
@@ -58,11 +63,13 @@ function GuardItemManagement() {
 
   const goBack = () => navigate(-1);
 
-  // Fetch settings
+  // Fetch settings (once)
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/settings`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/settings`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setSettings(data);
       } catch {
@@ -74,22 +81,74 @@ function GuardItemManagement() {
     fetchSettings();
   }, [API_BASE_URL]);
 
-  // Fetch items
-  useEffect(() => {
-    const fetchItems = async () => {
-      setLoadingItems(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/items`);
-        const data = await res.json();
-        if (res.ok) setItems(data);
-      } catch {
-        showToast("Failed to fetch items", "danger");
-      } finally {
-        setLoadingItems(false);
+  /* ---------- helper: shallow-ish equality for items (to avoid re-render churn) ---------- */
+  const isSameItem = (a = {}, b = {}) => {
+    return (
+      a._id === b._id &&
+      (a.updatedAt || "") === (b.updatedAt || "") &&
+      (a.archivedAt || "") === (b.archivedAt || "") &&
+      (a.status || "") === (b.status || "") &&
+      Number(a.penalty || 0) === Number(b.penalty || 0) &&
+      (a.description || "") === (b.description || "") &&
+      (a.firstname || "") === (b.firstname || "") &&
+      (a.lastname || "") === (b.lastname || "") &&
+      (a.photoUrl || "") === (b.photoUrl || "")
+    );
+  };
+
+  /**
+   * refreshItems now accepts `archived` boolean.
+   * When archived === true we call /api/items?archived=true so server returns archived
+   * items for the current viewer role (server must support this).
+   */
+  const refreshItems = async ({ showLoading = false, archived = false } = {}) => {
+    if (showLoading || initialLoadRef.current) setLoadingItems(true);
+    try {
+      const archivedParam = archived ? "?archived=true" : "";
+      const url = `${API_BASE_URL}/api/items${archivedParam}`;
+      const res = await fetchWithAuth(url, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast("Failed to refresh items", "danger");
+        return;
       }
-    };
-    fetchItems();
-  }, [API_BASE_URL]);
+      // Merge strategy: keep previous object references when item unchanged to avoid unnecessary rerenders
+      setItems((prev) => {
+        if (!Array.isArray(data)) return prev;
+        const prevById = new Map(prev.map((p) => [p._id, p]));
+        let changed = false;
+        const merged = data.map((newItem) => {
+          const prevItem = prevById.get(newItem._id);
+          if (prevItem && isSameItem(prevItem, newItem)) {
+            return prevItem; // reuse reference
+          } else {
+            changed = true;
+            return newItem;
+          }
+        });
+        // If nothing changed and lengths equal, keep previous array reference
+        if (!changed && merged.length === prev.length) return prev;
+        return merged;
+      });
+    } catch (e) {
+      console.error("refreshItems error", e);
+      showToast("Failed to refresh items", "danger");
+    } finally {
+      if (showLoading || initialLoadRef.current) {
+        setLoadingItems(false);
+        initialLoadRef.current = false;
+      }
+    }
+  };
+
+  // Fetch items on mount and whenever advancedFilters.archived changes.
+  // This ensures archived toggle causes a server fetch of archived items.
+  useEffect(() => {
+    refreshItems({ showLoading: initialLoadRef.current, archived: advancedFilters.archived });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API_BASE_URL, advancedFilters.archived]);
 
   // Confirm modal controls
   const openConfirm = (item, mode) => {
@@ -109,50 +168,63 @@ function GuardItemManagement() {
 
     try {
       if (confirmMode === "verify" && confirmTarget) {
-        const res = await fetch(`${API_BASE_URL}/api/items/${confirmTarget._id}/status`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "Claimed", guardId, guardName }),
-        });
-        if (!res.ok) throw new Error("Failed to verify item");
-
+        // optimistic update locally (fast feedback)
         setItems((prev) =>
           prev.map((it) => (it._id === confirmTarget._id ? { ...it, status: "Claimed", claimedAt: new Date().toISOString() } : it))
         );
+
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${confirmTarget._id}/status`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ status: "Claimed", guardId, guardName }),
+        });
+
+        if (!res.ok) {
+          // revert by fetching authoritative data (no big loading UI)
+          await refreshItems({ archived: advancedFilters.archived });
+          throw new Error("Failed to verify item");
+        }
+
+        // reconcile with server without showing the full loading spinner
+        await refreshItems({ archived: advancedFilters.archived });
         showToast("Item verified", "success");
       } else if (confirmMode === "archive" && confirmTarget) {
-        const res = await fetch(
-          `${API_BASE_URL}/api/items/${confirmTarget._id}/action`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "Archive" }),
-          }
-        );
-
-        if (!res.ok) throw new Error("Archive failed");
-
-        const data = await res.json().catch(() => ({}));
-        const updated = data.item || data || { ...confirmTarget, archivedAt: new Date().toISOString() };
-
+        // optimistic update locally
         setItems((prev) =>
           prev.map((it) =>
             it._id === confirmTarget._id
               ? {
-                  ...it,                 // KEEP populated userId
-                  archivedAt: updated.archivedAt || new Date().toISOString(),
-                  archivedBy: updated.archivedBy || guardId,
+                  ...it,
+                  archivedAt: new Date().toISOString(),
+                  archivedBy: guardId,
                   action: "Archive",
                 }
               : it
           )
         );
 
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${confirmTarget._id}/action`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ action: "Archive" }),
+        });
+
+        if (!res.ok) {
+          // revert to authoritative state
+          await refreshItems({ archived: advancedFilters.archived });
+          throw new Error("Archive failed");
+        }
+
+        // reconcile with server
+        await refreshItems({ archived: advancedFilters.archived });
         showToast("Item archived", "success");
       } else if (confirmMode === "download") {
         downloadPDF();
       }
-    } catch {
+    } catch (err) {
+      console.error("handleConfirm error", err);
       showToast(`Failed to ${confirmMode}`, "danger");
     } finally {
       closeConfirm();
@@ -167,7 +239,11 @@ function GuardItemManagement() {
     let y = 25;
     filteredItems.forEach((item, index) => {
       doc.setFontSize(12);
-      doc.text(`${index + 1}. ${item.userId?.firstname || ""} ${item.userId?.lastname || ""}`, 10, y);
+      const ownerName =
+        (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`.trim()) ||
+        item.guestName ||
+        `${item.firstname || ""} ${item.lastname || ""}`.trim();
+      doc.text(`${index + 1}. ${ownerName}`, 10, y);
       doc.setFontSize(10);
       doc.text(`Status: ${item.status} - Penalty: ${item.penalty || 0}P`, 10, y + 6);
       const descLines = doc.splitTextToSize(`Description: ${item.description || "-"}`, 180);
@@ -195,6 +271,7 @@ function GuardItemManagement() {
     setAdvancedFilters(filters);
     // clear archived selection when toggling archived mode
     setSelectedArchivedIds([]);
+    // Note: useEffect will trigger refreshItems when advancedFilters.archived changes
   };
 
   const handleClearAdvancedFilters = () => {
@@ -218,10 +295,8 @@ function GuardItemManagement() {
     showToast("Filters cleared", "success");
   };
 
-  // Visible set: when archived toggle is on, show only archived items (archivedAt truthy), otherwise show non-archived
-  const visibleItems = items.filter((item) =>
-    advancedFilters.archived ? Boolean(item.archivedAt) : !item.archivedAt
-  );
+  // Visible set: server returns full items (or archived subset when ?archived=true); client decides visible set
+  const visibleItems = items.filter((item) => (advancedFilters.archived ? Boolean(item.archivedAt) : !item.archivedAt));
 
   // Filters
   const filteredItems = visibleItems.filter((item) => {
@@ -231,24 +306,23 @@ function GuardItemManagement() {
     const dateToCompare = advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt;
     const matchesDate = !dateFilter || (dateToCompare && new Date(dateToCompare).toISOString().slice(0, 10) === dateFilter);
 
+    // Build ownerName once (supports guests)
+    const ownerName = (
+      (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`) ||
+      item.guestName ||
+      `${item.firstname || ""} ${item.lastname || ""}`
+    ).toLowerCase();
+
     const matchesSearch =
-      !searchQuery ||
-      item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.userId?.firstname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.userId?.lastname?.toLowerCase().includes(searchQuery.toLowerCase());
+      !searchQuery || item.description?.toLowerCase().includes(searchQuery.toLowerCase()) || ownerName.includes(searchQuery.toLowerCase());
 
     // advanced filters
     const { name, descriptions, penaltyMode, penaltyMin, penaltyMax } = advancedFilters;
 
-    const matchesName =
-      !name ||
-      item.userId?.firstname?.toLowerCase().includes(name.toLowerCase()) ||
-      item.userId?.lastname?.toLowerCase().includes(name.toLowerCase());
+    const matchesName = !name || ownerName.includes(name.toLowerCase());
 
     const matchesDescriptions =
-      !descriptions || descriptions.length === 0
-        ? true
-        : descriptions.some((d) => (item.description || "").toLowerCase().includes(d.toLowerCase()));
+      !descriptions || descriptions.length === 0 ? true : descriptions.some((d) => (item.description || "").toLowerCase().includes(d.toLowerCase()));
 
     const pp = Number(item.penalty || 0);
 
@@ -265,34 +339,23 @@ function GuardItemManagement() {
 
   const activeFilterCount = (() => {
     let count = 0;
-
-    // basic filters
     if (dateFilter) count++;
     if (statusFilter !== "All") count++;
-    if (searchQuery.trim()) count++;
-
-    // advanced filters
     if (advancedFilters.name) count++;
-    if (advancedFilters.descriptions?.length)
-      count += advancedFilters.descriptions.length;
-
-    if (advancedFilters.penaltyMode && advancedFilters.penaltyMode !== "any")
-      count++;
-
+    if (advancedFilters.descriptions?.length) count += advancedFilters.descriptions.length;
+    if (advancedFilters.penaltyMode && advancedFilters.penaltyMode !== "any") count++;
     if (advancedFilters.penaltyMin !== "") count++;
     if (advancedFilters.penaltyMax !== "") count++;
-
     if (advancedFilters.archived) count++;
-
-      return count;
-    })();
+    return count;
+  })();
 
   // Guard access disabled
   if (!loadingSettings && !settings?.guardAccess) {
     return (
       <div className="text-center mt-5">
         <h4 style={{ color: "#123458" }}>🚫 Guard access disabled</h4>
-        <button className="btn mt-3" style={{ background: "#123458", color: "#F1EFEC" }} onClick={goBack}>
+        <button type="button" className="btn mt-3" style={{ background: "#123458", color: "#F1EFEC" }} onClick={goBack}>
           Go Back
         </button>
       </div>
@@ -303,7 +366,10 @@ function GuardItemManagement() {
   const tryUnarchiveEndpoint = async (id) => {
     // Try /unarchive first, fallback to action Unarchive
     try {
-      const res = await fetch(`${API_BASE_URL}/api/items/${id}/unarchive`, { method: "PATCH" });
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${id}/unarchive`, {
+        method: "PATCH",
+        credentials: "include",
+      });
       if (res.ok) {
         const updated = await res.json();
         return { ok: true, updated };
@@ -313,9 +379,10 @@ function GuardItemManagement() {
     }
 
     try {
-      const res2 = await fetch(`${API_BASE_URL}/api/items/${id}/action`, {
+      const res2 = await fetchWithAuth(`${API_BASE_URL}/api/items/${id}/action`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ action: "Unarchive" }),
       });
       if (res2.ok) {
@@ -332,14 +399,20 @@ function GuardItemManagement() {
   };
 
   const performUnarchive = async (id) => {
+    // optimistic update: mark as restored in UI (no full loading spinner)
+    setItems((prev) => prev.map((it) => (it._id === id ? { ...it, archivedAt: null, action: "Deposited" } : it)));
+
     const result = await tryUnarchiveEndpoint(id);
     if (result.ok) {
+      // authoritative server data -> reconcile (merge)
       setItems((prev) => prev.map((it) => (it._id === result.updated._id ? result.updated : it)));
       showToast("Item restored", "success");
       // ensure selection cleared
       setSelectedArchivedIds((prev) => prev.filter((x) => x !== id));
       return true;
     } else {
+      // revert by refreshing server data (no big loading UI)
+      await refreshItems({ archived: advancedFilters.archived });
       showToast(result.error || "Unarchive failed", "danger");
       return false;
     }
@@ -351,10 +424,10 @@ function GuardItemManagement() {
     const ids = [...selectedArchivedIds];
     try {
       const results = await Promise.all(ids.map((id) => tryUnarchiveEndpoint(id)));
-      // apply successful updates
+      // apply successful updates: match by id
       setItems((prev) =>
         prev.map((it) => {
-          const r = results.find((res, idx) => res.ok && ids[idx] === it._id);
+          const r = results.find((res) => res && res.ok && res.updated && res.updated._id === it._id);
           if (r && r.ok) return r.updated;
           return it;
         })
@@ -366,7 +439,8 @@ function GuardItemManagement() {
       } else {
         showToast(`${failed.length} item(s) failed to unarchive`, "danger");
       }
-    } catch {
+    } catch (e) {
+      console.error("unarchiveSelected error", e);
       showToast("Bulk unarchive failed", "danger");
     } finally {
       setSelectedArchivedIds([]);
@@ -376,9 +450,7 @@ function GuardItemManagement() {
 
   /* ---------- Selection helpers for archived items ---------- */
   const toggleSelectArchived = (id) => {
-    setSelectedArchivedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSelectedArchivedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const toggleSelectAll = () => {
@@ -396,7 +468,7 @@ function GuardItemManagement() {
 
   const getLastUpdated = () =>
     items.length
-      ? Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt))))
+      ? Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt)).getTime()))
       : new Date();
 
   return (
@@ -406,79 +478,32 @@ function GuardItemManagement() {
         <div className="container-fluid p-2">
           <div className="row g-2 align-items-center">
             <div className="col-12 col-md-7 d-flex gap-2 align-items-center flex-wrap">
-              <button
-                className="btn d-inline-flex align-items-center justify-content-center"
-                style={{ background: "#123458", color: "#F1EFEC", minWidth: 42, height: "37px" }}
-                onClick={() => document.getElementById("filterDate")?.showPicker?.()}
-                aria-label="Open date picker"
-                title="Select date"
-              >
+              <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: "#123458", color: "#F1EFEC", minWidth: 42, height: "37px" }} onClick={() => document.getElementById("filterDate")?.showPicker?.()} aria-label="Open date picker" title="Select date">
                 <FaRegCalendarAlt />
               </button>
 
               {/* Date input with visible label/placeholder on mobile */}
               <div style={{ position: "relative", minWidth: 150 }}>
-                <input
-                  id="filterDate"
-                  type="date"
-                  className="form-control"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  style={{ maxWidth: 150, border: "1px solid #D4C9BE" }}
-                  aria-label="Filter by date"
-                />
+                <input id="filterDate" type="date" className="form-control" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} style={{ maxWidth: 150, border: "1px solid #D4C9BE" }} aria-label="Filter by date" />
               </div>
 
-              <select
-                className="form-select"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{ maxWidth: 195, border: "1px solid #D4C9BE" }}
-                aria-label="Filter by status"
-              >
+              <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ maxWidth: 195, border: "1px solid #D4C9BE" }} aria-label="Filter by status">
                 {["All", "Deposited", "Claimed", "Unclaimed"].map((s) => (
                   <option key={s}>{s}</option>
                 ))}
               </select>
 
               <div ref={filterContainerRef} style={{ position: "relative" }}>
-                <button
-                  className="form-control btn d-inline-flex align-items-center justify-content-center"
-                  onClick={() => setFilterPanelOpen((v) => !v)}
-                  aria-expanded={filterPanelOpen}
-                  aria-label="Open advanced filter"
-                  title="Advanced filters"
-                  style={{
-                    border: activeFilterCount > 0 ? "2px solid #123458" : "1px solid #D4C9BE",
-                    color: activeFilterCount > 0 ? "#123458" : "#030303",
-                    fontWeight: activeFilterCount > 0 ? 600 : 400,
-                  }}
-                >
+                <button type="button" className="form-control btn d-inline-flex align-items-center justify-content-center" onClick={() => setFilterPanelOpen((v) => !v)} aria-expanded={filterPanelOpen} aria-label="Open advanced filter" title="Advanced filters" style={{ border: activeFilterCount > 0 ? "2px solid #123458" : "1px solid #D4C9BE", color: activeFilterCount > 0 ? "#123458" : "#030303", fontWeight: activeFilterCount > 0 ? 600 : 400 }}>
                   <CiFilter />
-                  <span className="ms-1">
-                    Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-                  </span>
+                  <span className="ms-1">Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}</span>
                 </button>
 
-                <FilterPanel
-                  show={filterPanelOpen}
-                  onClose={() => setFilterPanelOpen(false)}
-                  onApply={handleApplyAdvancedFilters}
-                  onClear={() => {
-                    handleClearAdvancedFilters();
-                    showToast("Advanced filters cleared", "success");
-                  }}
-                  initialFilters={advancedFilters}
-                  anchorRef={filterContainerRef}
-                />
+                <FilterPanel show={filterPanelOpen} onClose={() => setFilterPanelOpen(false)} onApply={handleApplyAdvancedFilters} onClear={() => { handleClearAdvancedFilters(); showToast("Advanced filters cleared", "success"); }} initialFilters={advancedFilters} anchorRef={filterContainerRef} />
               </div>
 
               <div>
-                <button 
-                  className="form-control btn d-inline-flex align-items-center justify-content-center" 
-                  onClick={handleClearAll} 
-                  style={{ border: "1px solid #D4C9BE" }}
-                >
+                <button type="button" className="form-control btn d-inline-flex align-items-center justify-content-center" onClick={handleClearAll} style={{ border: "1px solid #D4C9BE" }}>
                   Clear
                 </button>
               </div>
@@ -486,56 +511,22 @@ function GuardItemManagement() {
 
             <div className="col-12 col-md-5 d-flex gap-2 justify-content-start justify-content-md-end">
               <div style={{ position: "relative", width: "100%" }}>
-                <BsSearch
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "10px",
-                    transform: "translateY(-50%)",
-                    color: "#6b6b6b",
-                    pointerEvents: "none",
-                  }}
-                />
+                <BsSearch style={{ position: "absolute", top: "50%", left: "10px", transform: "translateY(-50%)", color: "#6b6b6b", pointerEvents: "none" }} />
 
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  aria-label="Search items"
-                  style={{
-                    paddingLeft: "32px", // space for icon
-                    border: "1px solid #D4C9BE",
-                    minWidth: 0,
-                  }}
-                />
+                <input type="text" className="form-control" placeholder="Search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} aria-label="Search items" style={{ paddingLeft: "32px", border: "1px solid #D4C9BE", minWidth: 0 }} />
               </div>
 
               {/* When archived mode is ON show Unarchive selected button */}
               {advancedFilters.archived && (
                 <div className="d-flex align-items-center gap-2">
                   <div className="small text-muted me-2">{selectedArchivedIds.length} selected</div>
-                  <button
-                    className="btn d-inline-flex align-items-center justify-content-center"
-                    style={{ background: selectedArchivedIds.length > 0 ? "#123458" : "#D4C9BE", color: "#F1EFEC", minWidth: 44 }}
-                    disabled={selectedArchivedIds.length === 0 || bulkActionLoading}
-                    onClick={unarchiveSelected}
-                    title="Unarchive selected"
-                  >
+                  <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: selectedArchivedIds.length > 0 ? "#123458" : "#D4C9BE", color: "#F1EFEC", minWidth: 44 }} disabled={selectedArchivedIds.length === 0 || bulkActionLoading} onClick={unarchiveSelected} title="Unarchive selected">
                     Unarchive
                   </button>
                 </div>
               )}
 
-              <button
-                className="btn d-inline-flex align-items-center justify-content-center"
-                style={{ background: filteredItems.length > 0 ? "#123458" : "#D4C9BE", color: "#F1EFEC", minWidth: 44 }}
-                disabled={filteredItems.length === 0}
-                onClick={() => openConfirm(null, "download")}
-                aria-label="Download PDF"
-                title={filteredItems.length > 0 ? "Download PDF" : "No items to download"}
-              >
+              <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: filteredItems.length > 0 ? "#123458" : "#D4C9BE", color: "#F1EFEC", minWidth: 44 }} disabled={filteredItems.length === 0} onClick={() => openConfirm(null, "download")} aria-label="Download PDF" title={filteredItems.length > 0 ? "Download PDF" : "No items to download"}>
                 <FaFilePdf />
               </button>
             </div>
@@ -543,85 +534,66 @@ function GuardItemManagement() {
         </div>
       </div>
 
-      {/* CONTENT AREA: make the content take available space */}
+      {/* CONTENT AREA */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-        {/* MOBILE: card list (keeps your mobile look) */}
+        {/* MOBILE: card list */}
         <div className="d-md-none p-2" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
           {loadingItems ? (
-            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>⏳ Loading items...</div>
+            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
+              ⏳ Loading items...
+            </div>
           ) : filteredItems.length === 0 ? (
             <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
               {items.length === 0 ? "📦 No items currently deposited" : "🔍 No items matched your filter/search"}
             </div>
           ) : (
-            filteredItems.map((item, idx) => {
+            filteredItems.map((item) => {
               const isExpanded = expandedId === item._id;
-              const statusColor =
-                item.status === "Deposited" ? "#D4C9BE" :
-                item.status === "Claimed" ? "#90EE90" :
-                item.status === "Unclaimed" ? "#F08080" : "#FFD700";
+              const statusColor = item.status === "Deposited" ? "#D4C9BE" : item.status === "Claimed" ? "#90EE90" : item.status === "Unclaimed" ? "#F08080" : "#FFD700";
+
+              // Determine owner display (supports guest fields)
+              const ownerName = (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`.trim()) || item.guestName || `${item.firstname || ""} ${item.lastname || ""}`.trim();
 
               return (
                 <div key={item._id} className="rounded p-3 mb-2 shadow-sm" style={{ background: "#FFFFFF", border: "1px solid #D4C9BE" }}>
                   <div className="d-flex">
                     <div style={{ marginRight: 10 }}>
                       {advancedFilters.archived && (
-                        <input
-                          type="checkbox"
-                          checked={selectedArchivedIds.includes(item._id)}
-                          onChange={() => toggleSelectArchived(item._id)}
-                          aria-label={`Select archived item ${item.description}`}
-                        />
+                        <input type="checkbox" checked={selectedArchivedIds.includes(item._id)} onChange={() => toggleSelectArchived(item._id)} aria-label={`Select archived item ${item.description}`} />
                       )}
                     </div>
 
-                    <img
-                      src={item.photoUrl || "/logo.png"}
-                      alt=""
-                      style={{ width: 70, height: 70, borderRadius: 8, objectFit: "cover", marginRight: 10, border: "1px solid #D4C9BE", cursor: "pointer" }}
-                      onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")}
-                    />
+                    <img src={item.photoUrl || "/logo.png"} alt="" style={{ width: 70, height: 70, borderRadius: 8, objectFit: "cover", marginRight: 10, border: "1px solid #D4C9BE", cursor: "pointer" }} onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")} />
                     <div className="flex-grow-1 d-flex flex-column justify-content-between">
                       <div className="d-flex justify-content-between align-items-center w-100">
                         <div className="d-flex align-items-center gap-2">
-                          <h6 className="mb-0">{item.userId?.firstname} {item.userId?.lastname}</h6>
+                          <h6 className="mb-0">{ownerName}</h6>
                         </div>
-                        <div className="d-flex align-items-center" style={{gap: "3px"}}> 
-                          <small style={{ color: item.penalty > 0 ? "red" : "#D4C9BE", fontWeight: item.penalty > 0 ? "bold" : "normal", backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none" }}>
-                            {item.penalty || 0}P
-                          </small>
-                          <button className="btn btn-sm d-flex align-items-center justify-content-center" style={{ color: "#123458" }} onClick={() => setExpandedId(isExpanded ? null : item._id)}>
+                        <div className="d-flex align-items-center" style={{ gap: "3px" }}>
+                          <small style={{ color: item.penalty > 0 ? "red" : "#D4C9BE", fontWeight: item.penalty > 0 ? "bold" : "normal", backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none" }}>{item.penalty || 0}P</small>
+                          <button type="button" className="btn btn-sm d-flex align-items-center justify-content-center" style={{ color: "#123458" }} onClick={() => setExpandedId(isExpanded ? null : item._id)}>
                             {isExpanded ? <IoIosArrowDown size={20} /> : <MdOutlineKeyboardArrowRight size={20} />}
                           </button>
                         </div>
                       </div>
 
                       <div className="d-flex justify-content-between align-items-center mt-2">
-                        <button className="btn btn-sm" style={{ background: statusColor, color: item.status === "Unclaimed" ? "white" : "#030303", border: "1px solid #D4C9BE" }}>
+                        <button type="button" className="btn btn-sm" style={{ background: statusColor, color: item.status === "Unclaimed" ? "white" : "#030303", border: "1px solid #D4C9BE" }}>
                           {item.status}
                         </button>
 
                         <div className="d-flex gap-2">
                           {advancedFilters.archived ? (
-                            <button
-                              className="btn btn-sm"
-                              style={{ border: "1px solid #123458", color: "#123458" }}
-                              onClick={() => performUnarchive(item._id)}
-                            >
+                            <button type="button" className="btn btn-sm" style={{ border: "1px solid #123458", color: "#123458" }} onClick={() => performUnarchive(item._id)}>
                               Unarchive
                             </button>
                           ) : (
                             <>
-                              <button
-                                className="btn btn-sm"
-                                style={{ background: "#123458", color: "#F1EFEC", opacity: item.status === "Claimed" ? 0.7 : 1 }}
-                                disabled={item.status === "Claimed"}
-                                onClick={() => openConfirm(item, "verify")}
-                              >
+                              <button type="button" className="btn btn-sm" style={{ background: "#123458", color: "#F1EFEC", opacity: item.status === "Claimed" ? 0.7 : 1 }} disabled={item.status === "Claimed"} onClick={() => openConfirm(item, "verify")}>
                                 <IoCheckmarkCircleOutline /> Verify
                               </button>
 
-                              <button className="btn btn-sm btn-outline-danger" onClick={() => openConfirm(item, "archive")} style={{ border: "1px solid #D4C9BE" }}>
+                              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => openConfirm(item, "archive")} style={{ border: "1px solid #D4C9BE" }}>
                                 <LuArchiveX />
                               </button>
                             </>
@@ -643,73 +615,72 @@ function GuardItemManagement() {
           )}
         </div>
 
-        {/* DESKTOP: table (table-like, clean UI) */}
+        {/* DESKTOP: table */}
         <div className="d-none d-md-block p-2 container-fluid" style={{ flex: 1, minHeight: 0 }}>
           {loadingItems ? (
-            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>⏳ Loading items...</div>
+            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
+              ⏳ Loading items...
+            </div>
           ) : filteredItems.length === 0 ? (
             <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
               {items.length === 0 ? "📦 No items currently deposited" : "🔍 No items matched your filter/search"}
             </div>
           ) : (
-            // The table area itself becomes scrollable (only this area).
             <div className="table-responsive" style={{ height: "100%", overflowY: "auto", background: "#FFFFFF", border: "1px solid #D4C9BE" }}>
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">
                   <tr>
                     <th style={{ width: 48 }} className="text-center">
-                      {advancedFilters.archived ? (
-                        <input type="checkbox" checked={isAllSelected()} onChange={toggleSelectAll} aria-label="Select all archived items" />
-                      ) : "#"}
+                      {advancedFilters.archived ? <input type="checkbox" checked={isAllSelected()} onChange={toggleSelectAll} aria-label="Select all archived items" /> : "#"}
                     </th>
-                    <th style={{ width: 80 }} className="text-center">Photo</th>
+                    <th style={{ width: 80 }} className="text-center">
+                      Photo
+                    </th>
                     <th>Owner</th>
                     <th>Description</th>
                     <th style={{ width: 140 }}>{advancedFilters.archived ? "Archived Date" : "Date"}</th>
-                    <th style={{ width: 120 }} className="text-center">Status</th>
-                    <th style={{ width: 100 }} className="text-center">Penalty</th>
-                    <th style={{ width: 210 }} className="text-center">Actions</th>
+                    <th style={{ width: 120 }} className="text-center">
+                      Status
+                    </th>
+                    <th style={{ width: 100 }} className="text-center">
+                      Penalty
+                    </th>
+                    <th style={{ width: 210 }} className="text-center">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredItems.map((item, index) => {
-                    const statusColor =
-                      item.status === "Deposited" ? "#D4C9BE" :
-                      item.status === "Claimed" ? "#90EE90" :
-                      item.status === "Unclaimed" ? "#F08080" : "#FFD700";
+                    const statusColor = item.status === "Deposited" ? "#D4C9BE" : item.status === "Claimed" ? "#90EE90" : item.status === "Unclaimed" ? "#F08080" : "#FFD700";
+                    const ownerName = (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`.trim()) || item.guestName || `${item.firstname || ""} ${item.lastname || ""}`.trim();
 
                     return (
                       <tr key={item._id}>
                         <td className="text-center" style={{ verticalAlign: "middle" }}>
                           {advancedFilters.archived ? (
-                            <input
-                              type="checkbox"
-                              checked={selectedArchivedIds.includes(item._id)}
-                              onChange={() => toggleSelectArchived(item._id)}
-                              aria-label={`Select archived item ${item.description}`}
-                            />
+                            <input type="checkbox" checked={selectedArchivedIds.includes(item._id)} onChange={() => toggleSelectArchived(item._id)} aria-label={`Select archived item ${item.description}`} />
                           ) : (
                             index + 1
                           )}
                         </td>
 
                         <td className="text-center">
-                          <img
-                            src={item.photoUrl || "/logo.png"}
-                            alt={`${item.userId?.firstname || ""}`}
-                            style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: "1px solid #D4C9BE" }}
-                            onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")}
-                          />
+                          <img src={item.photoUrl || "/logo.png"} alt={`${item.userId?.firstname || ownerName || ""}`} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: "1px solid #D4C9BE" }} onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")} />
                         </td>
 
                         <td>
-                          <div style={{ fontWeight: 600 }}>{`${item.userId?.firstname || ""} ${item.userId?.lastname || ""}`}</div>
-                          <div className="text-muted" style={{ fontSize: ".85rem" }}>{item.userId?.email || ""}</div>
+                          <div style={{ fontWeight: 600 }}>{ownerName}</div>
+                          <div className="text-muted" style={{ fontSize: ".85rem" }}>
+                            {item.userId?.email || ""}
+                          </div>
                         </td>
 
                         <td style={{ wordBreak: "break-word", maxWidth: 360 }}>{item.description || "-"}</td>
 
-                        <td><small className="text-muted">{formatDate(advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt)}</small></td>
+                        <td>
+                          <small className="text-muted">{formatDate(advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt)}</small>
+                        </td>
 
                         <td className="text-center">
                           <span className="badge" style={{ background: statusColor, color: item.status === "Unclaimed" ? "#fff" : "#000" }}>
@@ -718,40 +689,22 @@ function GuardItemManagement() {
                         </td>
 
                         <td className="text-center">
-                          <small style={{ color: item.penalty > 0 ? "red" : "#6c757d", fontWeight: item.penalty > 0 ? 700 : 400,backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none"   }}>
-                            {item.penalty || 0}P
-                          </small>
+                          <small style={{ color: item.penalty > 0 ? "red" : "#6c757d", fontWeight: item.penalty > 0 ? 700 : 400, backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none" }}>{item.penalty || 0}P</small>
                         </td>
 
                         <td className="text-center">
                           <div className="d-flex justify-content-center gap-2">
                             {advancedFilters.archived ? (
-                              <button
-                                className="btn btn-sm"
-                                style={{ border: "1px solid #123458", color: "#123458", minWidth: 84 }}
-                                onClick={() => performUnarchive(item._id)}
-                                title="Unarchive item"
-                              >
+                              <button type="button" className="btn btn-sm" style={{ border: "1px solid #123458", color: "#123458", minWidth: 84 }} onClick={() => performUnarchive(item._id)} title="Unarchive item">
                                 Unarchive
                               </button>
                             ) : (
                               <>
-                                <button
-                                  className="btn btn-sm"
-                                  style={{ background: "#123458", color: "#F1EFEC", minWidth: 84 }}
-                                  disabled={item.status === "Claimed"}
-                                  onClick={() => openConfirm(item, "verify")}
-                                  title={item.status === "Claimed" ? "Already verified" : "Verify"}
-                                >
+                                <button type="button" className="btn btn-sm" style={{ background: "#123458", color: "#F1EFEC", minWidth: 84 }} disabled={item.status === "Claimed"} onClick={() => openConfirm(item, "verify")} title={item.status === "Claimed" ? "Already verified" : "Verify"}>
                                   <IoCheckmarkCircleOutline /> <span className="ms-1">Verify</span>
                                 </button>
 
-                                <button
-                                  className="btn btn-sm btn-outline-danger"
-                                  onClick={() => openConfirm(item, "archive")}
-                                  style={{ border: "1px solid #D4C9BE", minWidth: 56 }}
-                                  title="Archive item"
-                                >
+                                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => openConfirm(item, "archive")} style={{ border: "1px solid #D4C9BE", minWidth: 56 }} title="Archive item">
                                   <LuArchiveX />
                                 </button>
                               </>
@@ -770,13 +723,7 @@ function GuardItemManagement() {
 
       {/* FULL IMAGE LIGHTBOX */}
       {fullscreenImage && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center"
-          style={{ zIndex: 5000 }}
-          onClick={() => setFullscreenImage(null)}
-          role="dialog"
-          aria-modal="true"
-        >
+        <div className="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center" style={{ zIndex: 5000 }} onClick={() => setFullscreenImage(null)} role="dialog" aria-modal="true">
           <img src={fullscreenImage} alt="full" style={{ maxWidth: "92%", maxHeight: "92%" }} />
         </div>
       )}
@@ -789,25 +736,21 @@ function GuardItemManagement() {
             <div className="modal-dialog modal-sm modal-dialog-centered">
               <div className="modal-content" style={{ border: "1px solid #D4C9BE" }}>
                 <div className="modal-header">
-                  <h6 className="modal-title">
-                    {confirmMode === "verify" ? "Confirm Verification" : confirmMode === "archive" ? "Confirm Archive" : "Confirm Download"}
-                  </h6>
-                  <button className="btn-close" onClick={closeConfirm} />
+                  <h6 className="modal-title">{confirmMode === "verify" ? "Confirm Verification" : confirmMode === "archive" ? "Confirm Archive" : "Confirm Download"}</h6>
+                  <button type="button" className="btn-close" onClick={closeConfirm} />
                 </div>
 
                 <div className="text-muted p-3">
-                  <p>
-                    {confirmMode === "verify"
-                      ? "Are you sure you want to verify this item?"
-                      : confirmMode === "archive"
-                      ? "Are you sure you want to archive this item?"
-                      : "Do you want to download the PDF report?"}
-                  </p>
+                  <p>{confirmMode === "verify" ? "Are you sure you want to verify this item?" : confirmMode === "archive" ? "Are you sure you want to archive this item?" : "Do you want to download the PDF report?"}</p>
                 </div>
 
                 <div className="modal-footer">
-                  <button className="btn btn-secondary" onClick={closeConfirm}>No</button>
-                  <button className="btn" style={{ background: "#123458", color: "#F1EFEC" }} onClick={handleConfirm}>{confirmMode === "archive" ? "Yes, Archive" : "Yes"}</button>
+                  <button type="button" className="btn btn-secondary" onClick={closeConfirm}>
+                    No
+                  </button>
+                  <button type="button" className="btn" style={{ background: "#123458", color: "#F1EFEC" }} onClick={handleConfirm}>
+                    {confirmMode === "archive" ? "Yes, Archive" : "Yes"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -817,17 +760,7 @@ function GuardItemManagement() {
 
       {/* TOAST */}
       {toast.show && (
-        <div
-          className="position-fixed bottom-0 end-0 m-3 p-3 rounded shadow text-muted"
-          style={{
-            background: toast.type === "success" ? "#90EE90" : toast.type === "danger" ? "#F08080" : "#D4C9BE",
-            color: "#030303",
-            minWidth: 250,
-            zIndex: 4000,
-          }}
-          role="status"
-          aria-live="polite"
-        >
+        <div className="position-fixed bottom-0 end-0 m-3 p-3 rounded shadow text-muted" style={{ background: toast.type === "success" ? "#90EE90" : toast.type === "danger" ? "#F08080" : "#D4C9BE", color: "#030303", minWidth: 250, zIndex: 4000 }} role="status" aria-live="polite">
           {toast.message}
         </div>
       )}

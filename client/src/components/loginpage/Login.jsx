@@ -1,6 +1,7 @@
 import { useNavigate, NavLink } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
-import logo from "../../images/wtlogo-removebg.png";
+import logo from "../../images/wtlogofinal.png";
+import bgImage from "../../images/landing-bg.png";
 
 function Login() {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
@@ -15,6 +16,12 @@ function Login() {
   const [toastMessage, setToastMessage] = useState("");
   const [showToast, setShowToast] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Guest modal state
+  const [guestModalOpen, setGuestModalOpen] = useState(false);
+  const [guestFirst, setGuestFirst] = useState("");
+  const [guestLast, setGuestLast] = useState("");
+  const guestFirstRef = useRef(null);
 
   useEffect(() => {
     usernameRef.current?.focus();
@@ -44,8 +51,8 @@ function Login() {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const choice = await deferredPrompt.userChoice;
-    // optional: react to user's choice
     setDeferredPrompt(null);
+    // optional: react to user's choice
   };
 
   const handleLogin = async (e) => {
@@ -60,23 +67,20 @@ function Login() {
       const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // 🔥 REQUIRED
         body: JSON.stringify({ username: username.trim(), password }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        // server returned an error
         const message = data?.errorMessage || data?.message || `Login failed (${res.status})`;
         showToastMessage(message);
-        setPassword(""); // clear password on failure
+        setPassword("");
         setIsSubmitting(false);
         return;
       }
 
-      // Expect server to send token and user info
-      // Example data: { token, user: { id, firstname, lastname, role }, type }
-      const token = data?.token || data?.accessToken || null;
       const user = data?.user || null;
       const role = (data?.type || user?.role || "").toLowerCase();
 
@@ -86,23 +90,19 @@ function Login() {
         return;
       }
 
-      // Store minimal user info and token (if any)
       const stored = {
         id: user.id || user._id || null,
         firstname: user.firstname || user.firstName || "",
         lastname: user.lastname || user.lastName || "",
         role: role || "user",
-        token: token || null,
       };
-      // use localStorage for persistent login (or cookies/secure storage on production)
+
       localStorage.setItem("user", JSON.stringify(stored));
 
-      // Route based on role
       if (role === "admin") navigate("/admin");
       else if (["student", "visitor", "faculty"].includes(role)) navigate("/user");
       else if (role === "guard") navigate("/guard");
       else navigate("/user");
-
     } catch (error) {
       console.error("Login error:", error);
       showToastMessage("Server error. Try again later.");
@@ -111,19 +111,82 @@ function Login() {
     }
   };
 
-  const handleGuest = () => {
-    // Create a lightweight guest session
-    const guest = { id: `guest_${Date.now()}`, firstname: "Guest", lastname: "", role: "visitor" };
-    sessionStorage.setItem("guest", JSON.stringify(guest));
-    // you may also request a guest token from backend if required
-    navigate("/user");
+  // Open guest modal (instead of immediate guest creation)
+  const openGuestModal = () => {
+    // Pre-fill with last-guest if present
+    const prevGuest = JSON.parse(localStorage.getItem("guest_user") || "null");
+    if (prevGuest) {
+      setGuestFirst(prevGuest.firstname || "");
+      setGuestLast(prevGuest.lastname || "");
+    } else {
+      setGuestFirst("");
+      setGuestLast("");
+    }
+    setGuestModalOpen(true);
+    // focus first input after render
+    setTimeout(() => guestFirstRef.current?.focus(), 50);
+  };
+
+  const handleGuestSubmit = async () => {
+    const first = (guestFirst || "").trim();
+    const last = (guestLast || "").trim();
+    if (!first) { showToastMessage("Please enter first name for guest."); guestFirstRef.current?.focus(); return; }
+
+    try {
+      // Try create server-side guest session
+      const res = await fetch(`${API_BASE_URL}/api/guest`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstname: first, lastname: last }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.user) {
+        localStorage.setItem("user", JSON.stringify({
+          id: data.user.id,
+          firstname: data.user.firstname,
+          lastname: data.user.lastname,
+          role: data.user.role || "visitor",
+        }));
+        setGuestModalOpen(false);
+        showToastMessage("Continuing as guest", true);
+        navigate("/user");
+        return;
+      }
+
+      // fallback: client-only guest
+      throw new Error(data?.errorMessage || "Server guest creation failed");
+    } catch (err) {
+      // Fallback to purely local guest (inform user)
+      const guest = {
+        id: `guest_${Date.now()}`,
+        firstname: first,
+        lastname: last,
+        role: "visitor",
+        guestLocalOnly: true,
+      };
+      localStorage.setItem("user", JSON.stringify(guest));
+      localStorage.setItem("guest_user", JSON.stringify({ firstname: first, lastname: last }));
+      setGuestModalOpen(false);
+      showToastMessage("Continuing as local guest (limited). Sign in for full access.", true);
+      navigate("/user");
+    }
+  };
+
+  const handleGuestCancel = () => {
+    setGuestModalOpen(false);
   };
 
   return (
     <div
       className="d-flex align-items-center justify-content-center"
       style={{
-        backgroundColor: "#F1EFEC",
+        backgroundImage: `url(${bgImage})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
         minHeight: "100vh",
         padding: "20px",
       }}
@@ -137,7 +200,6 @@ function Login() {
           boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         }}
       >
-        {/* Top header row: logo + optional Install button */}
         <div className="d-flex justify-content-between align-items-start mb-3">
           <div className="text-center w-100">
             <img src={logo} alt="Logo" style={{ width: "90px" }} />
@@ -157,16 +219,16 @@ function Login() {
 
         <form onSubmit={handleLogin} aria-describedby="login-help">
           <div className="mb-3 text-start">
-            <label htmlFor="username" className="form-label" style={{ color: "#030303" }}>
-              Username
+            <label htmlFor="loginid" className="form-label" style={{ color: "#030303" }}>
+              Login ID
             </label>
             <input
-              id="username"
+              id="loginid"
               ref={usernameRef}
               type="text"
               value={username}
               className="form-control"
-              placeholder="Enter username"
+              placeholder="Enter login ID"
               onChange={(e) => setUsername(e.target.value)}
               required
               style={{ borderColor: "#D4C9BE", color: "#030303" }}
@@ -247,7 +309,7 @@ function Login() {
 
           <button
             type="button"
-            onClick={handleGuest}
+            onClick={openGuestModal}
             className="btn btn-link"
             style={{ color: "#123458", textDecoration: "none" }}
             title="Continue as guest"
@@ -264,7 +326,6 @@ function Login() {
               style={{
                 color: "#123458",
                 textDecoration: "none",
-                fontWeight: 500,
               }}
             >
               Register
@@ -286,13 +347,68 @@ function Login() {
                 fontSize: "0.9rem",
               }}
             >
-              Install App
+              Install
             </button>
           </div>
         )}
       </div>
 
-      {/* Toast (aria-live for screen readers) */}
+      {/* Guest Modal */}
+      {guestModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ background: "rgba(0,0,0,0.5)", zIndex: 2000 }}
+        >
+          <div
+            className="bg-white p-4 rounded"
+            style={{ width: 360, border: "1px solid #D4C9BE" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h5 className="mb-2" style={{ color: "#123458" }}>Continue as Guest</h5>
+            <p className="small text-muted mb-3">Please enter your name so we can attribute deposits to you.</p>
+
+            <div className="mb-2">
+              <label className="form-label small">First name</label>
+              <input
+                ref={guestFirstRef}
+                type="text"
+                className="form-control"
+                value={guestFirst}
+                onChange={(e) => setGuestFirst(e.target.value)}
+                placeholder="First name"
+                autoComplete="given-name"
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="form-label small">Last name</label>
+              <input
+                type="text"
+                className="form-control"
+                value={guestLast}
+                onChange={(e) => setGuestLast(e.target.value)}
+                placeholder="Last name"
+                autoComplete="family-name"
+              />
+            </div>
+
+            <div className="d-flex justify-content-end gap-2">
+              <button className="btn btn-outline-secondary" onClick={handleGuestCancel}>Cancel</button>
+              <button
+                className="btn"
+                style={{ background: "#123458", color: "#F1EFEC" }}
+                onClick={handleGuestSubmit}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
       {showToast && (
         <div
           className="toast show position-fixed bottom-0 end-0 m-3"

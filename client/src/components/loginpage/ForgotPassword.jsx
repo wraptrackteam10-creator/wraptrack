@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import bgImage from "../../images/landing-bg.png";
 import "bootstrap-icons/font/bootstrap-icons.css";
 
 function ForgotPassword() {
@@ -135,7 +136,14 @@ function ForgotPassword() {
   return (
     <div
       className="d-flex justify-content-center align-items-center"
-      style={{ minHeight: "100vh", background: "#F1EFEC", padding: 20 }}
+      style={{
+        backgroundImage: `url(${bgImage})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        minHeight: "100vh",
+        padding: "20px",
+      }}
     >
       <div className="card p-4 shadow" style={{ width: 420, background: "#FFFFFF", border: "1px solid #D4C9BE" }}>
         <h4 className="mb-3" style={{ color: "#030303" }}>Forgot Password</h4>
@@ -143,12 +151,12 @@ function ForgotPassword() {
         {step === 1 && (
           <form onSubmit={requestOtp}>
             <div className="mb-3">
-              <label className="form-label" style={{ color: "#030303" }}>ID Number</label>
+              <label className="form-label" style={{ color: "#030303" }}>Login ID</label>
               <input
                 className="form-control"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. 2022-1978"
+                placeholder=""
                 style={{ borderColor: "#D4C9BE", color: "#030303" }}
                 required
                 autoComplete="username"

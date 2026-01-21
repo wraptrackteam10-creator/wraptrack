@@ -2,15 +2,19 @@ const mongoose = require("mongoose");
 
 const itemSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    firstname: { type: String },
-    lastname: { type: String },
-    photoUrl: { type: String },
-    description: { type: String },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
 
-    action: { 
+    guestId: { type: String, default: null },
+
+    firstname: { type: String, default: "" },
+    lastname: { type: String, default: "" },
+    photoUrl: { type: String, default: "" },
+    description: { type: String, default: "" },
+
+    action: {
       type: String,
       enum: ["Deposited", "Archive", "Claimed", "Requested Claim"],
+      default: "Deposited",
     },
 
     status: {
@@ -19,21 +23,31 @@ const itemSchema = new mongoose.Schema(
       default: "Deposited",
     },
 
-    // 🔴 PENALTY SYSTEM
+    // PENALTY SYSTEM
     penalty: { type: Number, default: 0 },
-
-    // 🔑 prevents double penalty in the same day
     lastPenaltyAt: { type: Date, default: null },
 
     depositedAt: { type: Date, default: Date.now },
     claimedAt: { type: Date, default: null },
     unclaimedAt: { type: Date, default: null },
 
-    archivedAt: { type: Date, default: null },
-    archivedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
+    // ROLE-BASED ARCHIVE SYSTEM
+    archived: {
+      admin: {
+        isArchived: { type: Boolean, default: false },
+        at: { type: Date, default: null },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      },
+      guard: {
+        isArchived: { type: Boolean, default: false },
+        at: { type: Date, default: null },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      },
+      user: {
+        isArchived: { type: Boolean, default: false },
+        at: { type: Date, default: null },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      },
     },
   },
   { timestamps: true }

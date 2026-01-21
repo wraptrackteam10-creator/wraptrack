@@ -17,11 +17,15 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function Reports() {
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
   const chartRef = useRef(null);
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
 
@@ -57,13 +61,24 @@ function Reports() {
   };
 
   useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
-        const [itemsRes, usersRes] = await Promise.all([fetch(`${API_BASE_URL}/api/items`), fetch(`${API_BASE_URL}/api/users`)]);
+        const [itemsRes, usersRes] = await Promise.all([
+          fetchWithAuth(`${API_BASE_URL}/api/items`, { credentials: "include" }),
+          fetchWithAuth(`${API_BASE_URL}/api/users`, { credentials: "include" }),
+        ]);
         const itemsData = await itemsRes.json();
         const usersData = await usersRes.json();
-        setItems(itemsData);
-        setUsers(usersData);
+        setItems(itemsData || []);
+        setUsers(usersData || []);
       } catch (error) {
         console.error("Error fetching report data:", error);
       } finally {
@@ -73,15 +88,26 @@ function Reports() {
     fetchData();
   }, [API_BASE_URL]);
 
-  if (loading) return <p className="text-center mt-4" style={{ color: "#D4C9BE" }}>Loading reports...</p>;
+  if (loading)
+    return (
+      <p className="text-center mt-4" style={{ color: "#D4C9BE" }}>
+        Loading reports...
+      </p>
+    );
 
   // --- SUMMARY METRICS using timestamps ---
   const depositedCount = items.filter((i) => i.depositedAt).length;
   const claimedCount = items.filter((i) => i.claimedAt).length;
   const unclaimedCount = items.filter((i) => i.unclaimedAt).length;
   const penalizedCount = items.filter((i) => i.penalty && i.penalty > 0).length;
-  const totalUsers = users.filter((u) => u.userCredentials.type !== "admin" && u.userCredentials.type !== "guard").length;
-  const activeUsers = users.filter((u) => u.userCredentials.type !== "admin" && u.userCredentials.type !== "guard" && u.userCredentials.status === "Active");
+  const totalUsers = users.filter((u) => {
+    const type = u.userCredentials?.type;
+    return type !== "admin" && type !== "guard";
+  }).length;
+  const activeUsers = users.filter((u) => {
+    const type = u.userCredentials?.type;
+    return type !== "admin" && type !== "guard" && u.userCredentials?.status === "Active";
+  });
 
   // Average claim time in hours (only for items that have both depositedAt and claimedAt)
   const claimedItems = items.filter((i) => i.depositedAt && i.claimedAt);
@@ -90,7 +116,8 @@ function Reports() {
     const claimedTime = new Date(item.claimedAt).getTime();
     return sum + (claimedTime - depositedTime);
   }, 0);
-  const avgClaimHours = claimedItems.length > 0 ? (totalClaimTime / claimedItems.length / (1000 * 60 * 60)).toFixed(2) : 0;
+  const avgClaimHours =
+    claimedItems.length > 0 ? (totalClaimTime / claimedItems.length / (1000 * 60 * 60)).toFixed(2) : 0;
 
   const summary = {
     totalDeposited: depositedCount,
@@ -116,7 +143,10 @@ function Reports() {
   // --- Monthly Line Chart ---
   const monthlyDataLine = monthNames.map((month, i) => {
     const monthItems = items.filter(
-      (it) => it.action === "Deposited" && new Date(it.createdAt).getFullYear() === currentYear && new Date(it.createdAt).getMonth() === i
+      (it) =>
+        it.action === "Deposited" &&
+        new Date(it.createdAt).getFullYear() === currentYear &&
+        new Date(it.createdAt).getMonth() === i
     );
     const classCounts = {};
     classNames.forEach((c) => (classCounts[c] = 0));
@@ -407,10 +437,20 @@ function Reports() {
     pdf.save(`Item_Report_${currentYear}.pdf`);
   };
 
+  // Chart heights adjusted to screen size for improved mobile UX
+  const smallChartHeight = isMobile ? 180 : 250;
+  const mediumChartHeight = isMobile ? 220 : 300;
+  const lineChartHeight = isMobile ? 220 : 300;
+  const weeklyTickInterval = isMobile ? 6 : "preserveStartEnd";
+  const monthTickAngle = isMobile ? -30 : 0;
+
   return (
     <div className="container-fluid p-2" style={{ background: "#FFF", minHeight: "100vh" }}>
       {/* PAGE HEADER */}
-      <div className="d-flex justify-content-between mb-2 p-3 rounded" style={{ background: "#FFF", border: "1px solid #D4C9BE" }}>
+      <div
+        className="d-flex justify-content-between mb-2 p-3 rounded flex-wrap align-items-center"
+        style={{ background: "#FFF", border: "1px solid #D4C9BE" }}
+      >
         <div>
           <h4 className="fw-semibold mb-1">Reports & Analytics</h4>
           <small style={{ color: "#6b6b6b" }}>View and analyze deposited item activity</small>
@@ -424,7 +464,7 @@ function Reports() {
         </button>
       </div>
 
-      <div ref={chartRef}>
+      <div ref={chartRef} style={{ paddingBottom: 12 }}>
         {/* SUMMARY CARDS */}
         <div className="row g-2 mb-2">
           {[
@@ -435,8 +475,11 @@ function Reports() {
             { title: "Active Users", value: summary.activeUsers, color: "#90EE90" },
             { title: "Average Claim Time (hrs)", value: summary.avgClaimTime, color: "#123458" },
           ].map((item, idx) => (
-            <div key={idx} className="col-xl-2 col-lg-3 col-md-4 col-sm-6">
-              <div className="card shadow-sm rounded h-100 text-center" style={{ minHeight: "100px", border: "1px solid #D4C9BE" }}>
+            <div key={idx} className="col-6 col-sm-4 col-md-3 col-lg-2">
+              <div
+                className="card shadow-sm rounded h-100 text-center"
+                style={{ minHeight: "100px", border: "1px solid #D4C9BE" }}
+              >
                 <div className="card-body d-flex flex-column justify-content-center">
                   <h6 className="text-secondary fw-semibold mb-1">{item.title}</h6>
                   <h5 className="fw-bold" style={{ color: item.color }}>
@@ -450,13 +493,16 @@ function Reports() {
 
         {/* CHARTS */}
         <div className="row g-3 mb-3">
-          <div className="col-lg-6 col-sm-12">
-            <div className="card p-3 shadow-sm rounded h-100" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
+          <div className="col-lg-6 col-12">
+            <div
+              className="card p-3 shadow-sm rounded h-100"
+              style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}
+            >
               <h6 className="fw-semibold mb-3 text-center text-secondary">Top Items per Month</h6>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={monthlyDataBar}>
+              <ResponsiveContainer width="100%" height={smallChartHeight}>
+                <BarChart data={monthlyDataBar} margin={{ left: 10, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
+                  <XAxis dataKey="month" angle={monthTickAngle} textAnchor={isMobile ? "end" : "middle"} />
                   <YAxis />
                   <Tooltip />
                   <Legend />
@@ -469,18 +515,21 @@ function Reports() {
             </div>
           </div>
 
-          <div className="col-lg-6 col-sm-12">
-            <div className="card p-3 shadow-sm rounded h-100" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
+          <div className="col-lg-6 col-12">
+            <div
+              className="card p-3 shadow-sm rounded h-100"
+              style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}
+            >
               <h6 className="fw-semibold mb-3 text-center text-secondary">Claimed vs Unclaimed vs Penalized</h6>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={smallChartHeight}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} label dataKey="value">
+                  <Pie data={pieData} cx="50%" cy="50%" outerRadius={isMobile ? 70 : 80} label dataKey="value">
                     {pieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip />
-                  <Legend layout="horizontal" verticalAlign="bottom" align="center" />
+                  <Legend layout="horizontal" verticalAlign={isMobile ? "bottom" : "bottom"} align="center" />
                 </PieChart>
               </ResponsiveContainer>
               <p className="mt-2 text-center text-secondary">{pieInterpreter()}</p>
@@ -493,10 +542,10 @@ function Reports() {
           <div className="col-12">
             <div className="card p-3 shadow-sm rounded" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
               <h6 className="fw-semibold mb-3 text-center text-secondary">Weekly Deposited/Claimed/Unclaimed</h6>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={weeklyDataBar}>
+              <ResponsiveContainer width="100%" height={mediumChartHeight}>
+                <BarChart data={weeklyDataBar} margin={{ left: 10, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
+                  <XAxis dataKey="week" interval={weeklyTickInterval} angle={isMobile ? -45 : 0} textAnchor={isMobile ? "end" : "middle"} />
                   <YAxis />
                   <Tooltip />
                   <Legend />
@@ -515,15 +564,23 @@ function Reports() {
           <div className="col-12">
             <div className="card p-3 shadow-sm rounded" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
               <h6 className="fw-semibold mb-3 text-center text-secondary">Monthly Item Deposit Trend</h6>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyDataLine}>
+              <ResponsiveContainer width="100%" height={lineChartHeight}>
+                <LineChart data={monthlyDataLine} margin={{ left: 10, right: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
                   <Tooltip />
-                  <Legend />
+                  <Legend layout="horizontal" verticalAlign="bottom" align="center" />
                   {classNames.map((className, idx) => (
-                    <Line key={idx} type="monotone" dataKey={className} stroke={lineColors[idx]} name={className} dot={false} activeDot={{ r: 5 }} />
+                    <Line
+                      key={idx}
+                      type="monotone"
+                      dataKey={className}
+                      stroke={lineColors[idx]}
+                      name={className}
+                      dot={false}
+                      activeDot={{ r: 5 }}
+                    />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -562,9 +619,9 @@ function Reports() {
                     { metric: "Monthly Deposited Trend Line Chart", description: "Displays trends of item deposits per class each month.", value: lineChartInterpreter() },
                   ].map((item, idx) => (
                     <tr key={idx}>
-                      <td>{item.metric}</td>
-                      <td>{item.description}</td>
-                      <td>{typeof item.value === "number" ? item.value : item.value}</td>
+                      <td style={{ verticalAlign: "top", width: "20%" }}>{item.metric}</td>
+                      <td style={{ verticalAlign: "top", width: "40%" }}>{item.description}</td>
+                      <td style={{ verticalAlign: "top", width: "40%" }}>{typeof item.value === "number" ? item.value : item.value}</td>
                     </tr>
                   ))}
                 </tbody>

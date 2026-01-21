@@ -1,22 +1,25 @@
 const jwt = require("jsonwebtoken");
 
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+module.exports = (req, res, next) => {
+  try {
 
-  if (!authHeader) {
-    return res.status(401).json({ errorMessage: "No token provided" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ errorMessage: "Invalid or expired token" });
+    const token = req.cookies?.accessToken;
+    if (!token) {
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
-    req.user = decoded; // { userId, username, role, iat, exp }
-    next();
-  });
-};
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-module.exports = authenticateToken;
+    req.user = {
+      id: payload.sub || payload.userId,
+      role: payload.role,
+      rawRole: payload.rawRole,
+      username: payload.username,
+    };
+
+    next();
+  } catch (err) {
+    console.error("Auth middleware error:", err.message);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+};

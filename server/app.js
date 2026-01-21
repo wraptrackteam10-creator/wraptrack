@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const cron = require("node-cron");
+const cookieParser = require("cookie-parser");
 
 const { 
   autoUpdateUnclaimedItems,
@@ -17,8 +18,12 @@ const PORT = process.env.PORT || 8000;
 connectDB();
 
 // Middleware
-app.use(cors());
 app.use(express.json());
+app.use(cors({
+  origin: ["http://localhost:3000", "http://192.168.1.18:3000", "https://wraptrack.vercel.app"], // or your frontend URL
+  credentials: true,                                             // 🔥 REQUIRED for cookies
+})); 
+app.use(cookieParser());
 
 // Routes User
 const authRoutes = require("./routes/authRoutes");

@@ -1,6 +1,30 @@
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { LuCamera, LuImage } from "react-icons/lu";
+import { fetchWithAuth } from "../../../utils/fetchWithAuth";
+
+/**
+ * UserDepositPage — updated styles & responsiveness
+ *
+ * - Color system follows the project's rules (header/footer #123458, app bg #F1EFEC,
+ *   card/table surface #FFFFFF, borders #D4C9BE, primary actions #123458, delete #F08080).
+ * - Responsive:
+ *   * On small screens upload/scan buttons stack and are full-width.
+ *   * Card width adapts, inputs and buttons scale for mobile.
+ * - Uses inline styles to ensure exact colors without changing global CSS.
+ */
+
+const COLORS = {
+  appBg: "#F1EFEC",
+  header: "#123458",
+  headerText: "#F1EFEC",
+  surface: "#FFFFFF",
+  border: "#D4C9BE",
+  primary: "#123458",
+  delete: "#F08080",
+  text: "#030303",
+  muted: "#D4C9BE",
+};
 
 function UserDepositPage() {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
@@ -17,7 +41,7 @@ function UserDepositPage() {
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user")) : null;
 
   // =============================
   // SHOW TOAST
@@ -33,7 +57,9 @@ function UserDepositPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/settings`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/settings`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setSettings(data);
       } catch (error) {
@@ -48,18 +74,30 @@ function UserDepositPage() {
   }, [API_BASE_URL]);
 
   if (loadingSettings) {
-    return <div className="text-center mt-5">Loading settings...</div>;
+    return (
+      <div style={{ background: COLORS.appBg, minHeight: "100vh" }} className="d-flex align-items-center justify-content-center">
+        <div className="text-center mt-5">
+          <div style={{ color: COLORS.muted }}>Loading settings...</div>
+        </div>
+      </div>
+    );
   }
 
   if (!settings?.studentAccess) {
     return (
-      <div className="text-center mt-5">
-        <h4 className="text-danger">🚫 Deposit Feature Disabled</h4>
-        <p className="text-secondary small">The admin has turned OFF the deposit feature.</p>
-        <p className="text-secondary small">Please contact Admin.</p>
-        <button className="btn btn-primary mt-3" onClick={() => navigate(-1)}>
-          Go Back
-        </button>
+      <div style={{ background: COLORS.appBg, minHeight: "100vh" }} className="d-flex align-items-center justify-content-center">
+        <div className="text-center mt-5">
+          <h4 style={{ color: COLORS.delete }}>🚫 Deposit Feature Disabled</h4>
+          <p style={{ color: COLORS.muted }} className="small">The admin has turned OFF the deposit feature.</p>
+          <p style={{ color: COLORS.muted }} className="small">Please contact Admin.</p>
+          <button
+            className="btn"
+            style={{ background: COLORS.primary, color: COLORS.headerText, marginTop: 12 }}
+            onClick={() => navigate(-1)}
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
@@ -140,7 +178,8 @@ function UserDepositPage() {
 
     try {
       setDescription("⏳ Detecting...");
-      const res = await fetch("http://192.168.1.4:5000/predict", {
+      // https://kl0rgv7vxbph19-5000.proxy.runpod.net
+      const res = await fetch("https://78h6cdn9bgj3a4-5000.proxy.runpod.net/predict", {
         method: "POST",
         body: formData,
       });
@@ -190,8 +229,9 @@ function UserDepositPage() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/upload`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/upload`, {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
 
@@ -214,28 +254,54 @@ function UserDepositPage() {
   };
 
   return (
-    <div className="min-vh-100 d-flex flex-column bg-light position-relative">
+    <div style={{ background: COLORS.appBg, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* FIXED HEADER */}
       <div
-        className="text-center py-4 bg-dark text-white shadow-sm"
-        style={{ position: "sticky", top: 0, zIndex: 10 }}
+        className="text-center py-3"
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          background: COLORS.header,
+          color: COLORS.headerText,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+        }}
       >
-        <h3 className="fw-bold d-flex align-items-center justify-content-center gap-2">
+        <h3 className="fw-bold mb-0 d-flex align-items-center justify-content-center gap-2">
           <LuCamera size={22} /> Item Deposit
         </h3>
-        <small>Scan or upload your item for storage</small>
+        <small style={{ color: COLORS.headerText, opacity: 0.95 }}>Scan or upload your item for storage</small>
       </div>
 
       {/* SCROLLABLE MAIN */}
       <div className="flex-grow-1 overflow-auto p-3">
         <div
-          className="card border-0 shadow-sm p-4 mx-auto"
-          style={{ maxWidth: "500px", borderRadius: "18px" }}
+          className="mx-auto"
+          style={{
+            maxWidth: 680,
+            background: COLORS.surface,
+            borderRadius: 18,
+            border: `1px solid ${COLORS.border}`,
+            padding: 20,
+            boxShadow: "0 6px 24px rgba(0,0,0,0.04)",
+          }}
         >
-          {/* Upload Buttons */}
-          <div className="d-flex justify-content-around mb-4">
-            <label className="btn btn-dark col-5 d-flex align-items-center justify-content-center gap-2">
-              <LuImage size={18} /> Upload
+          {/* Upload Buttons (stack on xs, inline on md+) */}
+          <div className="d-flex flex-column flex-sm-row gap-3 mb-4">
+            <label
+              className="d-flex align-items-center justify-content-center"
+              style={{
+                cursor: "pointer",
+                flex: 1,
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: "transparent",
+                border: `1px solid ${COLORS.border}`,
+                color: COLORS.text,
+                textAlign: "center",
+              }}
+            >
+              <LuImage size={18} style={{ marginRight: 8 }} /> Upload
               <input
                 type="file"
                 accept="image/*"
@@ -244,8 +310,19 @@ function UserDepositPage() {
               />
             </label>
 
-            <label className="btn btn-dark col-5 d-flex align-items-center justify-content-center gap-2">
-              <LuCamera size={18} /> Scan
+            <label
+              className="d-flex align-items-center justify-content-center"
+              style={{
+                cursor: "pointer",
+                flex: 1,
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: COLORS.primary,
+                color: COLORS.headerText,
+                textAlign: "center",
+              }}
+            >
+              <LuCamera size={18} style={{ marginRight: 8 }} /> Scan
               <input
                 type="file"
                 accept="image/*"
@@ -261,8 +338,16 @@ function UserDepositPage() {
             <div className="text-center mb-3">
               <button
                 type="button"
-                className="btn btn-outline-dark btn-sm mb-2 rounded-pill"
-                onClick={() => setShowPreview(!showPreview)}
+                className="btn"
+                style={{
+                  background: "transparent",
+                  border: `1px solid ${COLORS.border}`,
+                  color: COLORS.text,
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  marginBottom: 10,
+                }}
+                onClick={() => setShowPreview((s) => !s)}
               >
                 {showPreview ? "Hide Preview ▲" : "Show Preview ▼"}
               </button>
@@ -271,8 +356,8 @@ function UserDepositPage() {
                 <img
                   src={image}
                   alt="Preview"
-                  className="img-fluid rounded shadow"
-                  style={{ maxHeight: "250px", objectFit: "contain" }}
+                  className="img-fluid rounded shadow-sm"
+                  style={{ maxHeight: 300, objectFit: "contain", border: `1px solid ${COLORS.border}` }}
                 />
               )}
             </div>
@@ -281,50 +366,71 @@ function UserDepositPage() {
           {/* Form */}
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label className="form-label fw-semibold">Item Description</label>
+              <label className="form-label fw-semibold" style={{ color: COLORS.text }}>
+                Item Description
+              </label>
               <input
                 type="text"
                 value={description}
                 readOnly
-                className="form-control border-dark"
+                className="form-control"
+                style={{ border: `1px solid ${COLORS.border}`, background: COLORS.surface, color: COLORS.text }}
               />
             </div>
 
             <div className="mb-3">
-              <label className="form-label fw-semibold">Depositor</label>
+              <label className="form-label fw-semibold" style={{ color: COLORS.text }}>
+                Depositor
+              </label>
               <input
                 type="text"
-                value={`${user.firstname} ${user.lastname}`}
+                value={`${user?.firstname || ""} ${user?.lastname || ""}`}
                 disabled
-                className="form-control border-dark"
+                className="form-control"
+                style={{ border: `1px solid ${COLORS.border}`, background: COLORS.surface, color: COLORS.text }}
               />
             </div>
 
             <div className="row">
-              <div className="col-6 mb-3">
-                <label className="form-label fw-semibold">Date</label>
+              <div className="col-12 col-sm-6 mb-3">
+                <label className="form-label fw-semibold" style={{ color: COLORS.text }}>
+                  Date
+                </label>
                 <input
                   type="text"
                   value={new Date().toLocaleDateString()}
                   disabled
-                  className="form-control border-dark"
+                  className="form-control"
+                  style={{ border: `1px solid ${COLORS.border}`, background: COLORS.surface, color: COLORS.text }}
                 />
               </div>
-              <div className="col-6 mb-3">
-                <label className="form-label fw-semibold">Time</label>
+              <div className="col-12 col-sm-6 mb-3">
+                <label className="form-label fw-semibold" style={{ color: COLORS.text }}>
+                  Time
+                </label>
                 <input
                   type="text"
                   value={new Date().toLocaleTimeString()}
                   disabled
-                  className="form-control border-dark"
+                  className="form-control"
+                  style={{ border: `1px solid ${COLORS.border}`, background: COLORS.surface, color: COLORS.text }}
                 />
               </div>
             </div>
 
-            <div className="d-flex justify-content-around mt-4">
+            <div className="d-flex flex-column flex-sm-row gap-3 mt-3">
               <button
                 type="submit"
-                className="btn btn-success col-5 fw-bold"
+                className="btn"
+                style={{
+                  flex: 1,
+                  background: COLORS.primary,
+                  color: COLORS.headerText,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  border: `1px solid ${COLORS.primary}`,
+                }}
                 disabled={
                   loading ||
                   !file ||
@@ -339,7 +445,16 @@ function UserDepositPage() {
 
               <button
                 type="button"
-                className="btn btn-danger col-5 fw-bold"
+                className="btn"
+                style={{
+                  flex: 1,
+                  background: "transparent",
+                  color: COLORS.delete,
+                  border: `1px solid ${COLORS.delete}`,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  fontWeight: 700,
+                }}
                 onClick={() => navigate(-1)}
                 disabled={loading}
               >
@@ -353,14 +468,18 @@ function UserDepositPage() {
       {/* TOAST */}
       {toast.show && (
         <div
-          className={`position-fixed bottom-0 end-0 m-3 p-3 rounded shadow ${
-            toast.type === "success"
-              ? "bg-success text-white"
-              : toast.type === "danger"
-              ? "bg-danger text-white"
-              : "bg-warning text-dark"
-          }`}
-          style={{ zIndex: 2000, minWidth: "250px" }}
+          className="position-fixed bottom-0 end-0 m-3 p-3 rounded shadow"
+          style={{
+            zIndex: 2000,
+            minWidth: 260,
+            background:
+              toast.type === "success"
+                ? COLORS.primary
+                : toast.type === "danger"
+                ? COLORS.delete
+                : "#ffc107",
+            color: toast.type === "warning" ? "#030303" : "#fff",
+          }}
         >
           {toast.message}
         </div>

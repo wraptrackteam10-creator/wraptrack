@@ -1,8 +1,11 @@
-import logo from "../../images/wtlogo-removebg.png";
+import logo from "../../images/wtlogofinal.png";
 import { FaBell, FaBars, FaTrash } from "react-icons/fa";
+import { CiLogout } from "react-icons/ci";
+import { BsJournalText } from "react-icons/bs";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "./usercss/navbar.css";
+import { fetchWithAuth } from "../../utils/fetchWithAuth";
 
 function NavBarU() {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
@@ -15,20 +18,29 @@ function NavBarU() {
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Confirmation modal
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmType, setConfirmType] = useState(""); // "single" or "all"
+  const [confirmType, setConfirmType] = useState("");
   const [targetNotifId, setTargetNotifId] = useState(null);
 
   const user = JSON.parse(localStorage.getItem("user"));
   const menuRef = useRef(null);
   const notifRef = useRef(null);
 
-  // Load system settings
+  const COLORS = {
+    header: "#123458",
+    light: "#F1EFEC",
+    muted: "#D4C9BE",
+    text: "#030303",
+    danger: "#dc3545",
+    card: "#ffffff",
+  };
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/settings`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/settings`, {
+          credentials: "include",
+        });
         const data = await res.json();
         if (res.ok) setSettings(data);
       } catch (error) {
@@ -38,19 +50,18 @@ function NavBarU() {
     fetchSettings();
   }, [API_BASE_URL]);
 
-  // Load notifications
   useEffect(() => {
     if (!user || !settings?.remindersEnable) return;
 
     const fetchNotifications = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/notifications/${user.id}`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/notifications/${user.id}`, {
+          credentials: "include",
+        });
         const data = await res.json();
         if (res.ok) {
           setNotifications(data);
           setUnreadCount(data.filter((n) => !n.read).length);
-        } else {
-          console.error("Error fetching notifications:", data.error);
         }
       } catch (error) {
         console.error("Fetch notifications failed:", error);
@@ -62,7 +73,6 @@ function NavBarU() {
     fetchNotifications();
   }, [user, settings, API_BASE_URL]);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -79,7 +89,6 @@ function NavBarU() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle bell click (mark all as read)
   const handleBellClick = async () => {
     if (!settings?.remindersEnable) {
       alert("⚠️ Notifications are currently disabled by admin.");
@@ -90,13 +99,12 @@ function NavBarU() {
     setShowNotifications(willShow);
     setShowMenu(false);
 
-    // Mark all as read immediately in UI
     if (willShow && unreadCount > 0 && user) {
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
 
       try {
-        await fetch(`${API_BASE_URL}/api/notifications/read-all/${user.id}`, {
+        await fetchWithAuth(`${API_BASE_URL}/api/notifications/read-all/${user.id}`, {
           method: "PUT",
         });
       } catch (error) {
@@ -105,7 +113,6 @@ function NavBarU() {
     }
   };
 
-  // Confirmation modal actions
   const confirmDeleteSingle = (id) => {
     setConfirmType("single");
     setTargetNotifId(id);
@@ -123,11 +130,9 @@ function NavBarU() {
     setConfirmOpen(false);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/notifications/all/${user.id}`, {
+      await fetchWithAuth(`${API_BASE_URL}/api/notifications/all/${user.id}`, {
         method: "DELETE",
       });
-      const data = await res.json();
-      console.log("Clear all response:", data);
     } catch (error) {
       console.error("Failed to clear all notifications:", error);
     }
@@ -138,11 +143,9 @@ function NavBarU() {
     setConfirmOpen(false);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/notifications/${id}`, {
+      await fetchWithAuth(`${API_BASE_URL}/api/notifications/${id}`, {
         method: "DELETE",
       });
-      const data = await res.json();
-      console.log("Deleted single notification:", data);
     } catch (error) {
       console.error("Failed to delete notification:", error);
     }
@@ -156,64 +159,100 @@ function NavBarU() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetchWithAuth(`${API_BASE_URL}/api/logout`, {
+        method: "POST",
+        credentials: "include", // 🔥 VERY IMPORTANT
+      });
+    } catch (error) {
+      console.error("Logout failed:", error);
+    };
+
+    localStorage.removeItem("user");
+    navigate("/");
+    setShowMenu(false);
+  };
+
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center p-3 bg-black bg-gradient shadow-sm">
-        {/* Logo + Title */}
+      {/* HEADER */}
+      <div
+        className="d-flex justify-content-between align-items-center px-4 py-2 shadow-sm"
+        style={{
+          backgroundColor: COLORS.header,
+          color: COLORS.light,
+          borderBottom: `1px solid ${COLORS.muted}`,
+        }}
+      >
+        {/* Logo */}
         <div className="d-flex align-items-center gap-2">
-          <img src={logo} alt="logo" width="40" />
-          <h3 className="fw-bold text-light m-0">WraPTrack</h3>
+          <img src={logo} alt="logo" width="38" />
+          <h4 className="fw-bold m-0" style={{ color: COLORS.light }}>
+            WraPTrack
+          </h4>
         </div>
 
-        {/* Icons Section */}
+        {/* Icons */}
         <div className="d-flex align-items-center gap-3 position-relative">
-          {/* 🔔 Bell Icon */}
+          {/* Bell */}
           <div ref={notifRef} className="position-relative">
             <FaBell
-              size={24}
-              className={`text-light ${!settings?.remindersEnable ? "text-muted" : ""}`}
+              size={22}
               onClick={handleBellClick}
-              style={{ cursor: settings?.remindersEnable ? "pointer" : "not-allowed" }}
+              style={{
+                color: settings?.remindersEnable ? COLORS.light : COLORS.muted,
+                cursor: settings?.remindersEnable ? "pointer" : "not-allowed",
+              }}
             />
+
             {settings?.remindersEnable && unreadCount > 0 && (
               <span
-                className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                style={{ fontSize: "0.65rem", transform: "translate(-40%, 40%)" }}
+                className="position-absolute top-0 start-100 translate-middle badge rounded-pill"
+                style={{
+                  backgroundColor: COLORS.danger,
+                  fontSize: "0.65rem",
+                  transform: "translate(-40%, 40%)",
+                }}
               >
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
 
-            {/* Notifications Dropdown */}
             {showNotifications && settings?.remindersEnable && (
               <div
-                className="position-absolute end-0 mt-2 bg-white border rounded shadow-sm"
-                style={{ width: "280px", zIndex: 1000 }}
+                className="position-absolute end-0 mt-2 rounded shadow-sm"
+                style={{
+                  width: "280px",
+                  backgroundColor: COLORS.card,
+                  border: `1px solid ${COLORS.muted}`,
+                  zIndex: 2000,
+                }}
               >
                 <ul
                   className="list-unstyled m-0 p-2"
                   style={{ maxHeight: "260px", overflowY: "auto" }}
                 >
                   {loading ? (
-                    <li className="p-2 text-muted small text-center">Loading...</li>
+                    <li className="p-2 text-muted small text-center">
+                      Loading...
+                    </li>
                   ) : notifications.length > 0 ? (
                     notifications.map((note) => (
                       <li
                         key={note._id}
                         className="p-2 border-bottom small d-flex justify-content-between align-items-start"
                       >
-                        <div>
+                        <div style={{ color: COLORS.text }}>
                           {note.message}
                           <br />
                           <small className="text-muted">
-                            {new Date(note.createdAt).toLocaleString([], {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
+                            {new Date(note.createdAt).toLocaleString()}
                           </small>
                         </div>
                         <button
-                          className="btn btn-sm btn-light text-danger border-0"
+                          className="btn btn-sm border-0"
+                          style={{ color: COLORS.danger }}
                           onClick={() => confirmDeleteSingle(note._id)}
                         >
                           ✖
@@ -221,7 +260,9 @@ function NavBarU() {
                       </li>
                     ))
                   ) : (
-                    <li className="p-2 text-muted small text-center">No notifications</li>
+                    <li className="p-2 text-muted small text-center">
+                      No notifications
+                    </li>
                   )}
                 </ul>
 
@@ -239,41 +280,45 @@ function NavBarU() {
             )}
           </div>
 
-          {/* ☰ Menu */}
+          {/* Menu */}
           <div ref={menuRef}>
             <FaBars
-              size={24}
-              className="text-light"
+              size={22}
               onClick={() => {
                 setShowMenu(!showMenu);
                 setShowNotifications(false);
               }}
-              style={{ cursor: "pointer" }}
+              style={{ color: COLORS.light, cursor: "pointer" }}
             />
+
             {showMenu && (
               <div
-                className="position-absolute end-0 mt-2 bg-white border rounded shadow-sm"
-                style={{ width: "200px", zIndex: 1000 }}
+                className="position-absolute end-0 mt-2 rounded shadow-sm"
+                style={{
+                  width: "200px",
+                  backgroundColor: COLORS.card,
+                  border: `1px solid ${COLORS.muted}`,
+                  zIndex: 2000,
+                }}
               >
                 <ul className="list-unstyled m-0 p-2">
                   <li
                     className="p-2 border-bottom small dropdown-item-clickable"
+                    style={{ color: COLORS.text }}
                     onClick={() => {
                       navigate("/user/history");
                       setShowMenu(false);
                     }}
                   >
-                    📜 History Log
+                    <BsJournalText size={18} />  History Log
                   </li>
                   <li
                     className="p-2 small text-danger dropdown-item-clickable"
                     onClick={() => {
-                      localStorage.removeItem("user");
-                      navigate("/");
-                      setShowMenu(false);
+                      handleLogout();
                     }}
                   >
-                    🚪 Logout
+                    <CiLogout size={18} /> Logout
                   </li>
                 </ul>
               </div>
@@ -285,8 +330,8 @@ function NavBarU() {
       {/* Confirmation Modal */}
       {confirmOpen && (
         <div
-          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-dark bg-opacity-50"
-          style={{ zIndex: 2000 }}
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)", zIndex: 2000 }}
         >
           <div className="bg-white p-4 rounded shadow" style={{ width: "300px" }}>
             <h6 className="fw-bold mb-2">Confirm Delete</h6>
