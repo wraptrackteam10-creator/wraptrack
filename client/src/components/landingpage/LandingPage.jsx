@@ -9,7 +9,7 @@ import image6 from "../../images/carousel_6.png";
 import image7 from "../../images/carousel_7.png";
 import logo from "../../images/wtlogo2.png";
 import { MdEmail, MdPhone } from "react-icons/md";
-import { FaGithub, FaUniversity, FaBars } from "react-icons/fa";
+import { FaUniversity, FaBars } from "react-icons/fa";
 import { NavLink } from 'react-router-dom';
 import { useState, useEffect, useRef } from "react";
 

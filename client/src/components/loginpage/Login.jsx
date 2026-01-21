@@ -50,7 +50,7 @@ function Login() {
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice;
+    // const choice = await deferredPrompt.userChoice;
     setDeferredPrompt(null);
     // optional: react to user's choice
   };
