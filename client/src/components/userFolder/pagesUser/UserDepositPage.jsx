@@ -179,6 +179,7 @@ function UserDepositPage() {
     try {
       setDescription("⏳ Detecting...");
       // https://kl0rgv7vxbph19-5000.proxy.runpod.net
+      
       const res = await fetch("https://78h6cdn9bgj3a4-5000.proxy.runpod.net/predict", {
         method: "POST",
         body: formData,
