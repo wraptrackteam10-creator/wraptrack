@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import UserFilterPanel from "./UserFilterPanel";
 import { BsSearch } from "react-icons/bs";
@@ -59,7 +59,6 @@ function UserManagement() {
     let isMounted = true;
 
     const fetchUsers = async () => {
-      setLoading(true);
       try {
         const url = userAdvancedFilters.archived
           ? `${API_BASE_URL}/api/users?archived=true`
@@ -69,16 +68,10 @@ function UserManagement() {
         const data = await res.json();
 
         if (isMounted) {
-          if (Array.isArray(data)) {
-            setUsers(data);
-          } else {
-            console.error("Invalid response format:", data);
-            setUsers([]);
-            showToast("Failed to load users format", "danger");
-          }
+          setUsers(data);
         }
       } catch {
-        if (isMounted) showToast("Failed to load users", "danger");
+        showToast("Failed to load users", "danger");
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -86,8 +79,11 @@ function UserManagement() {
 
     fetchUsers();
 
+    const interval = setInterval(fetchUsers, 5000);
+
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, [API_BASE_URL, userAdvancedFilters.archived]);
 
@@ -285,17 +281,20 @@ function UserManagement() {
   };
 
   /* ---------------- FILTERING ---------------- */
-  const visibleUsers = useMemo(() => {
-    return users.filter((u) =>
-      userAdvancedFilters.archived ? Boolean(u.archivedAt) : !u.archivedAt
-    );
-  }, [users, userAdvancedFilters.archived]);
+  // show archived users only when the advanced filter archived is true
+  const visibleUsers = users.filter((u) =>
+    userAdvancedFilters.archived ? Boolean(u.archivedAt) : !u.archivedAt
+  );
 
+  // helper to extract date portion (YYYY-MM-DD) from possible date fields
   const isoDateFor = (u) => {
+    // when showing archived users, use archivedAt as primary date
     if (userAdvancedFilters.archived && u.archivedAt) {
       try {
         return new Date(u.archivedAt).toISOString().slice(0, 10);
-      } catch {}
+      } catch {
+        // fallthrough
+      }
     }
     const possible = u.createdAt || u.registeredAt || u.updatedAt || "";
     try {
@@ -305,76 +304,81 @@ function UserManagement() {
     }
   };
 
-  const filteredUsers = useMemo(() => {
-    return visibleUsers.filter((u) => {
-      const fullName = `${u.firstname || ""} ${u.lastname || ""}`.toLowerCase();
-      if (search && !fullName.includes(search.toLowerCase())) return false;
+  // Apply search text + date + advanced user filters
+  const filteredUsers = visibleUsers.filter((u) => {
+    // search by full name
+    const fullName = `${u.firstname || ""} ${u.lastname || ""}`.toLowerCase();
+    if (search && !fullName.includes(search.toLowerCase())) return false;
 
-      if (dateFilter) {
-        const userDate = isoDateFor(u);
-        if (!userDate || userDate !== dateFilter) return false;
-      }
+    // date filter (matches user's created/registered/updated date or archivedAt when archived mode)
+    if (dateFilter) {
+      const userDate = isoDateFor(u);
+      if (!userDate || userDate !== dateFilter) return false;
+    }
 
-      const { username, email, types, statuses } = userAdvancedFilters;
+    const { username, email, types, statuses } = userAdvancedFilters;
 
-      if (username) {
-        const uname = (u.userCredentials?.username || "").toLowerCase();
-        if (!uname.includes(username.toLowerCase())) return false;
-      }
+    if (username) {
+      const uname = (u.userCredentials?.username || "").toLowerCase();
+      if (!uname.includes(username.toLowerCase())) return false;
+    }
 
-      if (email) {
-        const uemail = (u.userCredentials?.email || "").toLowerCase();
-        if (!uemail.includes(email.toLowerCase())) return false;
-      }
+    if (email) {
+      const uemail = (u.userCredentials?.email || "").toLowerCase();
+      if (!uemail.includes(email.toLowerCase())) return false;
+    }
 
-      if (types?.length > 0) {
-        if (!types.includes(u.userCredentials?.type)) return false;
-      }
+    if (types?.length > 0) {
+      if (!types.includes(u.userCredentials?.type)) return false;
+    }
 
-      if (statuses?.length > 0) {
-        if (!statuses.includes(u.userCredentials?.status)) return false;
-      }
-      return true;
-    });
-  }, [visibleUsers, search, dateFilter, userAdvancedFilters]);
+    if (statuses?.length > 0) {
+      if (!statuses.includes(u.userCredentials?.status)) return false;
+    }
+    return true;
+  });
 
   /* ---------------- SORTING ---------------- */
-  const sortedUsers = useMemo(() => {
-    const typeOrderAsc = ["student", "faculty", "visitor", "guard", "admin"];
-    const typeOrderDesc = [...typeOrderAsc].reverse();
+  const typeOrderAsc = ["student", "faculty", "visitor", "guard", "admin"];
+  const typeOrderDesc = [...typeOrderAsc].reverse();
 
-    const statusOrderAsc = ["Active", "Inactive"];
-    const statusOrderDesc = [...statusOrderAsc].reverse();
+  const statusOrderAsc = ["Active", "Inactive"];
+  const statusOrderDesc = [...statusOrderAsc].reverse();
 
-    let sorted = [...filteredUsers];
+  let sortedUsers = [...filteredUsers];
 
-    if (sortField && sortOrder) {
-      sorted.sort((a, b) => {
-        if (sortField === "date") {
-          const getDateVal = (obj) => {
-            if (userAdvancedFilters.archived && obj.archivedAt) return new Date(obj.archivedAt);
-            return new Date(obj.createdAt || obj.registeredAt || obj.updatedAt || 0);
-          };
-          const A = getDateVal(a);
-          const B = getDateVal(b);
-          return sortOrder === "asc" ? A - B : B - A;
-        }
+  if (sortField && sortOrder) {
+    sortedUsers.sort((a, b) => {
+      if (sortField === "date") {
+        // if viewing archived users, sort by archivedAt, else by created/registered/updated
+        const getDateVal = (obj) => {
+          if (userAdvancedFilters.archived && obj.archivedAt) return new Date(obj.archivedAt);
+          return new Date(obj.createdAt || obj.registeredAt || obj.updatedAt || 0);
+        };
+        const A = getDateVal(a);
+        const B = getDateVal(b);
+        return sortOrder === "asc" ? A - B : B - A;
+      }
 
-        if (sortField === "type") {
-          const order = sortOrder === "asc" ? typeOrderAsc : typeOrderDesc;
-          return order.indexOf(a.userCredentials.type) - order.indexOf(b.userCredentials.type);
-        }
+      if (sortField === "type") {
+        const order = sortOrder === "asc" ? typeOrderAsc : typeOrderDesc;
+        return (
+          order.indexOf(a.userCredentials.type) -
+          order.indexOf(b.userCredentials.type)
+        );
+      }
 
-        if (sortField === "status") {
-          const order = sortOrder === "asc" ? statusOrderAsc : statusOrderDesc;
-          return order.indexOf(a.userCredentials.status) - order.indexOf(b.userCredentials.status);
-        }
+      if (sortField === "status") {
+        const order = sortOrder === "asc" ? statusOrderAsc : statusOrderDesc;
+        return (
+          order.indexOf(a.userCredentials.status) -
+          order.indexOf(b.userCredentials.status)
+        );
+      }
 
-        return 0;
-      });
-    }
-    return sorted;
-  }, [filteredUsers, sortField, sortOrder, userAdvancedFilters.archived]);
+      return 0;
+    });
+  }
 
   /* ---------------- TIME AGO ---------------- */
   const timeAgo = (date) => {
@@ -387,6 +391,7 @@ function UserManagement() {
 
   const getLastUpdated = () => {
     if (!visibleUsers.length) return new Date();
+    // when viewing archived users, consider archivedAt for "Updated" indicator
     if (userAdvancedFilters.archived) {
       return new Date(Math.max(...visibleUsers.map((u) => new Date(u.archivedAt || 0))));
     }
@@ -402,6 +407,7 @@ function UserManagement() {
       statuses: filters.statuses || [],
       archived: Boolean(filters.archived),
     });
+    // When switching to archived view, clear any selected archived IDs
     setSelectedArchivedIds([]);
     showToast("User filters applied", "success");
   };
@@ -430,15 +436,22 @@ function UserManagement() {
     showToast("All filters & sorting cleared", "success");
   };
 
-  const activeUserFilterCount = useMemo(() => {
+  const activeUserFilterCount = (() => {
     let c = 0;
+
     if (userAdvancedFilters.username) c++;
     if (userAdvancedFilters.email) c++;
-    if (userAdvancedFilters.types?.length) c += userAdvancedFilters.types.length;
-    if (userAdvancedFilters.statuses?.length) c += userAdvancedFilters.statuses.length;
+
+    if (userAdvancedFilters.types?.length)
+      c += userAdvancedFilters.types.length;
+
+    if (userAdvancedFilters.statuses?.length)
+      c += userAdvancedFilters.statuses.length;
+
     if (userAdvancedFilters.archived) c++;
+
     return c;
-  }, [userAdvancedFilters]);
+  })();
 
   const formatDate = (iso) => {
     if (!iso) return "";
@@ -457,6 +470,11 @@ function UserManagement() {
     );
   };
 
+  // const selectAllVisible = () => {
+  //   const ids = sortedUsers.map((u) => u._id);
+  //   setSelectedArchivedIds(ids);
+  // };
+
   const clearAllSelected = () => setSelectedArchivedIds([]);
 
   const toggleSelectAll = () => {
@@ -467,10 +485,10 @@ function UserManagement() {
     else setSelectedArchivedIds(ids);
   };
 
-  const isAllSelected = useMemo(() => {
+  const isAllSelected = () => {
     const ids = sortedUsers.map((u) => u._id);
     return ids.length > 0 && ids.every((id) => selectedArchivedIds.includes(id));
-  }, [sortedUsers, selectedArchivedIds]);
+  };
 
   return (
     <div className="container-fluid p-2">
@@ -602,7 +620,7 @@ function UserManagement() {
                         {userAdvancedFilters.archived ? (
                           <input
                             type="checkbox"
-                            checked={isAllSelected}
+                            checked={isAllSelected()}
                             onChange={toggleSelectAll}
                             aria-label="Select all displayed archived users"
                           />

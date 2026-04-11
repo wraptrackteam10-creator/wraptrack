@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import jsPDF from "jspdf";
 import { BsSearch } from "react-icons/bs";
 import "react-datepicker/dist/react-datepicker.css";
@@ -6,7 +6,6 @@ import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function GuardHistoryLog() {
   const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState(null);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState(""); // YYYY-MM-DD string
@@ -17,39 +16,32 @@ function GuardHistoryLog() {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        setLoading(true);
         const response = await fetchWithAuth(`${API_BASE_URL}/api/guardlogs`);
         if (!response.ok) throw new Error("Failed to fetch guard logs");
         const data = await response.json();
-        if (!Array.isArray(data)) return setLogs([]);
         setLogs(data);
       } catch (error) {
         console.error("Error fetching guard logs:", error);
-        setLogs([]);
-      } finally {
-        setLoading(false);
       }
     };
     fetchLogs();
   }, [API_BASE_URL]);
 
-  const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
-      const term = search.trim().toLowerCase();
-      const matchesSearch =
-        !term ||
-        (log.description && log.description.toLowerCase().includes(term)) ||
-        (log.action && log.action.toLowerCase().includes(term)) ||
-        (log.owner && log.owner.firstname && log.owner.firstname.toLowerCase().includes(term)) ||
-        (log.owner && log.owner.lastname && log.owner.lastname.toLowerCase().includes(term));
+  const filteredLogs = logs.filter((log) => {
+    const term = search.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      (log.description && log.description.toLowerCase().includes(term)) ||
+      (log.action && log.action.toLowerCase().includes(term)) ||
+      (log.owner && log.owner.firstname && log.owner.firstname.toLowerCase().includes(term)) ||
+      (log.owner && log.owner.lastname && log.owner.lastname.toLowerCase().includes(term));
 
-      const matchesDate = !dateFilter
-        ? true
-        : new Date(log.createdAt).toISOString().slice(0, 10) === dateFilter;
+    const matchesDate = !dateFilter
+      ? true
+      : new Date(log.createdAt).toISOString().slice(0, 10) === dateFilter;
 
-      return matchesSearch && matchesDate;
-    });
-  }, [logs, search, dateFilter]);
+    return matchesSearch && matchesDate;
+  });
 
   const truncate = (text, length = 60) =>
     !text ? "" : text.length > length ? text.slice(0, length) + "..." : text;
@@ -277,22 +269,14 @@ function GuardHistoryLog() {
                   <th>Owner</th>
                   <th>Description</th>
                   <th style={{ width: 160 }}>Action</th>
+                  <th style={{ width: 140 }} className="text-end">Details</th>
                 </tr>
               </thead>
 
               <tbody>
-                {loading ? (
+                {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center text-muted py-5">
-                      <div className="spinner-border" style={{ color: "#123458" }} role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </div>
-                      <div className="mt-2 text-dark" style={{ fontWeight: 500 }}>Fetching logs...</div>
-                    </td>
-                  </tr>
-                ) : filteredLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="text-center text-muted py-4">
+                    <td colSpan="6" className="text-center text-muted py-4">
                       No logs found.
                     </td>
                   </tr>
@@ -317,11 +301,26 @@ function GuardHistoryLog() {
                         </td>
 
                         <td style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", maxWidth: 420 }}>
-                          {log.description}
+                          {truncate(log.description, 160)}
                         </td>
 
                         <td style={{ verticalAlign: "middle" }}>
                           <div style={{ fontWeight: 600 }}>{log.action || "-"}</div>
+                        </td>
+
+                        <td className="text-end">
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => handleViewDetails(log._id)}
+                            style={{
+                              border: "1px solid #123458",
+                              color: "#123458",
+                              background: "transparent",
+                              minWidth: 110,
+                            }}
+                          >
+                            {selectedCard === log._id ? "Hide Details" : "View Details"}
+                          </button>
                         </td>
                       </tr>
                     );
@@ -334,14 +333,7 @@ function GuardHistoryLog() {
 
         {/* Mobile cards */}
         <div className="d-md-none p-3" style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
-          {loading ? (
-            <div className="text-center py-5">
-              <div className="spinner-border" style={{ color: "#123458" }} role="status">
-                <span className="visually-hidden">Loading...</span>
-              </div>
-              <div className="mt-2 text-dark" style={{ fontWeight: 500 }}>Fetching logs...</div>
-            </div>
-          ) : filteredLogs.length === 0 ? (
+          {filteredLogs.length === 0 ? (
             <div className="text-center text-muted">No logs found.</div>
           ) : (
             filteredLogs.map((log, idx) => {

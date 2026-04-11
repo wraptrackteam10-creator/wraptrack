@@ -1,5 +1,5 @@
 // full file — only functional changes are: refreshItems accepts `archived` and useEffect now re-fetches when advancedFilters.archived changes
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { LuArchiveX } from "react-icons/lu";
 import { IoCheckmarkCircleOutline } from "react-icons/io5";
@@ -44,7 +44,6 @@ function GuardItemManagement() {
 
   // Ref for filter button container to position the floating panel
   const filterContainerRef = useRef(null);
-  const datePickerRef = useRef(null);
 
   // Selection for archived items
   const [selectedArchivedIds, setSelectedArchivedIds] = useState([]);
@@ -167,8 +166,6 @@ function GuardItemManagement() {
   const handleConfirm = async () => {
     if (!confirmMode) return;
 
-    const originalItems = [...items]; // cache in case of disconnect
-
     try {
       if (confirmMode === "verify" && confirmTarget) {
         // optimistic update locally (fast feedback)
@@ -185,8 +182,7 @@ function GuardItemManagement() {
 
         if (!res.ok) {
           // revert by fetching authoritative data (no big loading UI)
-          setItems(originalItems);
-          await refreshItems({ archived: advancedFilters.archived }).catch(() => {});
+          await refreshItems({ archived: advancedFilters.archived });
           throw new Error("Failed to verify item");
         }
 
@@ -217,8 +213,7 @@ function GuardItemManagement() {
 
         if (!res.ok) {
           // revert to authoritative state
-          setItems(originalItems);
-          await refreshItems({ archived: advancedFilters.archived }).catch(() => {});
+          await refreshItems({ archived: advancedFilters.archived });
           throw new Error("Archive failed");
         }
 
@@ -301,52 +296,48 @@ function GuardItemManagement() {
   };
 
   // Visible set: server returns full items (or archived subset when ?archived=true); client decides visible set
-  const visibleItems = useMemo(() => {
-    return items.filter((item) => (advancedFilters.archived ? Boolean(item.archivedAt) : !item.archivedAt));
-  }, [items, advancedFilters.archived]);
+  const visibleItems = items.filter((item) => (advancedFilters.archived ? Boolean(item.archivedAt) : !item.archivedAt));
 
   // Filters
-  const filteredItems = useMemo(() => {
-    return visibleItems.filter((item) => {
-      const matchesStatus = statusFilter === "All" || item.status === statusFilter;
+  const filteredItems = visibleItems.filter((item) => {
+    const matchesStatus = statusFilter === "All" || item.status === statusFilter;
 
-      // date filter: when archived view is ON, compare archivedAt; else compare createdAt
-      const dateToCompare = advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt;
-      const matchesDate = !dateFilter || (dateToCompare && new Date(dateToCompare).toISOString().slice(0, 10) === dateFilter);
+    // date filter: when archived view is ON, compare archivedAt; else compare createdAt
+    const dateToCompare = advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt;
+    const matchesDate = !dateFilter || (dateToCompare && new Date(dateToCompare).toISOString().slice(0, 10) === dateFilter);
 
-      // Build ownerName once (supports guests)
-      const ownerName = (
-        (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`) ||
-        item.guestName ||
-        `${item.firstname || ""} ${item.lastname || ""}`
-      ).toLowerCase();
+    // Build ownerName once (supports guests)
+    const ownerName = (
+      (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`) ||
+      item.guestName ||
+      `${item.firstname || ""} ${item.lastname || ""}`
+    ).toLowerCase();
 
-      const matchesSearch =
-        !searchQuery || item.description?.toLowerCase().includes(searchQuery.toLowerCase()) || ownerName.includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      !searchQuery || item.description?.toLowerCase().includes(searchQuery.toLowerCase()) || ownerName.includes(searchQuery.toLowerCase());
 
-      // advanced filters
-      const { name, descriptions, penaltyMode, penaltyMin, penaltyMax } = advancedFilters;
+    // advanced filters
+    const { name, descriptions, penaltyMode, penaltyMin, penaltyMax } = advancedFilters;
 
-      const matchesName = !name || ownerName.includes(name.toLowerCase());
+    const matchesName = !name || ownerName.includes(name.toLowerCase());
 
-      const matchesDescriptions =
-        !descriptions || descriptions.length === 0 ? true : descriptions.some((d) => (item.description || "").toLowerCase().includes(d.toLowerCase()));
+    const matchesDescriptions =
+      !descriptions || descriptions.length === 0 ? true : descriptions.some((d) => (item.description || "").toLowerCase().includes(d.toLowerCase()));
 
-      const pp = Number(item.penalty || 0);
+    const pp = Number(item.penalty || 0);
 
-      let matchesPenaltyMode = true;
-      if (penaltyMode === "penalty") matchesPenaltyMode = pp > 0;
-      else if (penaltyMode === "no-penalty") matchesPenaltyMode = pp === 0;
+    let matchesPenaltyMode = true;
+    if (penaltyMode === "penalty") matchesPenaltyMode = pp > 0;
+    else if (penaltyMode === "no-penalty") matchesPenaltyMode = pp === 0;
 
-      let matchesPenaltyRange = true;
-      if (penaltyMin !== "" && !Number.isNaN(Number(penaltyMin))) matchesPenaltyRange = matchesPenaltyRange && pp >= Number(penaltyMin);
-      if (penaltyMax !== "" && !Number.isNaN(Number(penaltyMax))) matchesPenaltyRange = matchesPenaltyRange && pp <= Number(penaltyMax);
+    let matchesPenaltyRange = true;
+    if (penaltyMin !== "" && !Number.isNaN(Number(penaltyMin))) matchesPenaltyRange = matchesPenaltyRange && pp >= Number(penaltyMin);
+    if (penaltyMax !== "" && !Number.isNaN(Number(penaltyMax))) matchesPenaltyRange = matchesPenaltyRange && pp <= Number(penaltyMax);
 
-      return matchesStatus && matchesDate && matchesSearch && matchesName && matchesDescriptions && matchesPenaltyMode && matchesPenaltyRange;
-    });
-  }, [visibleItems, statusFilter, dateFilter, searchQuery, advancedFilters]);
+    return matchesStatus && matchesDate && matchesSearch && matchesName && matchesDescriptions && matchesPenaltyMode && matchesPenaltyRange;
+  });
 
-  const activeFilterCount = useMemo(() => {
+  const activeFilterCount = (() => {
     let count = 0;
     if (dateFilter) count++;
     if (statusFilter !== "All") count++;
@@ -357,7 +348,7 @@ function GuardItemManagement() {
     if (advancedFilters.penaltyMax !== "") count++;
     if (advancedFilters.archived) count++;
     return count;
-  }, [dateFilter, statusFilter, advancedFilters]);
+  })();
 
   // Guard access disabled
   if (!loadingSettings && !settings?.guardAccess) {
@@ -408,7 +399,6 @@ function GuardItemManagement() {
   };
 
   const performUnarchive = async (id) => {
-    const originalItems = [...items]; // capture current items array for rollback
     // optimistic update: mark as restored in UI (no full loading spinner)
     setItems((prev) => prev.map((it) => (it._id === id ? { ...it, archivedAt: null, action: "Deposited" } : it)));
 
@@ -422,8 +412,7 @@ function GuardItemManagement() {
       return true;
     } else {
       // revert by refreshing server data (no big loading UI)
-      setItems(originalItems);
-      await refreshItems({ archived: advancedFilters.archived }).catch(() => {});
+      await refreshItems({ archived: advancedFilters.archived });
       showToast(result.error || "Unarchive failed", "danger");
       return false;
     }
@@ -472,10 +461,15 @@ function GuardItemManagement() {
     else setSelectedArchivedIds(ids);
   };
 
-  const isAllSelected = useMemo(() => {
+  const isAllSelected = () => {
     const ids = filteredItems.map((u) => u._id);
     return ids.length > 0 && ids.every((id) => selectedArchivedIds.includes(id));
-  }, [filteredItems, selectedArchivedIds]);
+  };
+
+  // const getLastUpdated = () =>
+    items.length
+      ? Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt)).getTime()))
+      : new Date();
 
   return (
     <div className="d-flex flex-column" style={{ height: "100%", backgroundColor: "#F1EFEC", color: "#030303" }}>
@@ -484,13 +478,13 @@ function GuardItemManagement() {
         <div className="container-fluid p-2">
           <div className="row g-2 align-items-center">
             <div className="col-12 col-md-7 d-flex gap-2 align-items-center flex-wrap">
-              <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: "#123458", color: "#F1EFEC", minWidth: 42, height: "37px" }} onClick={() => datePickerRef.current?.showPicker?.()} aria-label="Open date picker" title="Select date">
+              <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: "#123458", color: "#F1EFEC", minWidth: 42, height: "37px" }} onClick={() => document.getElementById("filterDate")?.showPicker?.()} aria-label="Open date picker" title="Select date">
                 <FaRegCalendarAlt />
               </button>
 
               {/* Date input with visible label/placeholder on mobile */}
               <div style={{ position: "relative", minWidth: 150 }}>
-                <input ref={datePickerRef} id="filterDate" type="date" className="form-control" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} style={{ maxWidth: 150, border: "1px solid #D4C9BE" }} aria-label="Filter by date" />
+                <input id="filterDate" type="date" className="form-control" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} style={{ maxWidth: 150, border: "1px solid #D4C9BE" }} aria-label="Filter by date" />
               </div>
 
               <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ maxWidth: 195, border: "1px solid #D4C9BE" }} aria-label="Filter by status">
@@ -637,7 +631,7 @@ function GuardItemManagement() {
                 <thead className="table-light">
                   <tr>
                     <th style={{ width: 48 }} className="text-center">
-                      {advancedFilters.archived ? <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} aria-label="Select all archived items" /> : "#"}
+                      {advancedFilters.archived ? <input type="checkbox" checked={isAllSelected()} onChange={toggleSelectAll} aria-label="Select all archived items" /> : "#"}
                     </th>
                     <th style={{ width: 80 }} className="text-center">
                       Photo

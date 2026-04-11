@@ -37,52 +37,21 @@ const COLORS = {
 function UserHomePage() {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "";
   const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [expandedItemId, setExpandedItemId] = useState(null); // mobile-only expansion
   const [selectedImage, setSelectedImage] = useState(null);
-
-  // Custom alerts and confirmations
-  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmTarget, setConfirmTarget] = useState(null);
-
   const user = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user")) : null;
 
   const cardsRef = useRef({});
 
-  const showToast = (message, type = "success", duration = 3000) => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast({ show: false, message: "", type: "success" }), duration);
-  };
-
-  const openConfirm = (id) => {
-    setConfirmTarget(id);
-    setConfirmOpen(true);
-  };
-
-  const closeConfirm = () => {
-    setConfirmOpen(false);
-    setConfirmTarget(null);
-  };
-
-  const confirmArchive = async () => {
-    if (!confirmTarget) return;
-    const targetId = confirmTarget;
-    closeConfirm();
-    await archiveItem(targetId);
-  };
-
   useEffect(() => {
     const fetchItems = async () => {
       try {
-        setLoading(true);
         const res = await fetchWithAuth(`${API_BASE_URL}/api/items`, {
           credentials: "include",
         });
         const data = await res.json();
         if (res.ok) {
-          if (!Array.isArray(data)) return setItems([]);
-          const userItems = data.filter(
+          const userItems = (data || []).filter(
             (item) =>
               item.userId?._id === user?.id &&
               item.action !== "Archive" &&
@@ -91,18 +60,13 @@ function UserHomePage() {
           setItems(userItems);
         } else {
           console.error("Failed to fetch items:", data?.error);
-          setItems([]);
         }
       } catch (error) {
         console.error("Error fetching items:", error);
-        setItems([]);
-      } finally {
-        setLoading(false);
       }
     };
-    if (user?.id) fetchItems();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, API_BASE_URL]);
+    if (user) fetchItems();
+  }, [user, API_BASE_URL]);
 
   // Penalty time helper
   const getPenaltyTime = (status, createdAt, penalty) => {
@@ -156,14 +120,13 @@ function UserHomePage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        showToast(err.error || "Failed to archive item", "danger");
+        alert(err.error || "Failed to archive item");
         return;
       }
       setItems((prev) => prev.filter((i) => i._id !== id));
-      showToast("Item successfully archived.", "success");
     } catch (err) {
       console.error(err);
-      showToast("Failed to archive item", "danger");
+      alert("Failed to archive item");
     }
   };
 
@@ -271,16 +234,7 @@ function UserHomePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {loading ? (
-                        <tr>
-                          <td colSpan={9} className="text-center text-muted py-5">
-                            <div className="spinner-border" style={{ color: COLORS.primary }} role="status">
-                              <span className="visually-hidden">Loading...</span>
-                            </div>
-                            <div className="mt-2 text-dark" style={{ fontWeight: 500 }}>Fetching your items...</div>
-                          </td>
-                        </tr>
-                      ) : items.length === 0 ? (
+                      {items.length === 0 ? (
                         <tr>
                           <td colSpan={9} className="text-center text-muted py-5" style={{ color: COLORS.muted }}>
                             No items found. Start by scanning or claiming items.
@@ -342,7 +296,11 @@ function UserHomePage() {
                                     color: COLORS.delete,
                                     background: "transparent",
                                   }}
-                                  onClick={() => openConfirm(item._id)}
+                                  onClick={async () => {
+                                    if (window.confirm("Archive this item?")) {
+                                      await archiveItem(item._id);
+                                    }
+                                  }}
                                   aria-label="Archive item"
                                 >
                                   <i className="bi bi-archive" />
@@ -361,14 +319,7 @@ function UserHomePage() {
 
           {/* Mobile stacked cards */}
           <div className="d-block d-md-none">
-            {loading ? (
-              <div className="text-center py-5">
-                <div className="spinner-border" style={{ color: COLORS.primary }} role="status">
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <div className="mt-2 text-dark" style={{ fontWeight: 500 }}>Fetching your items...</div>
-              </div>
-            ) : items.length === 0 ? (
+            {items.length === 0 ? (
               <div className="text-center text-muted py-5" style={{ color: COLORS.muted }}>
                 <i className="bi bi-box-seam display-4 d-block mb-3" />
                 <h6 style={{ color: COLORS.text }}>No items found yet</h6>
@@ -515,52 +466,6 @@ function UserHomePage() {
               border: `1px solid ${COLORS.border}`,
             }}
           />
-        </div>
-      )}
-
-      {/* CONFIRM MODAL */}
-      {confirmOpen && (
-        <>
-          <div className="modal-backdrop show" onClick={closeConfirm} style={{ zIndex: 5000, background: "rgba(0,0,0,0.5)" }} />
-          <div className="modal d-block" style={{ zIndex: 6000 }}>
-            <div className="modal-dialog modal-sm modal-dialog-centered">
-              <div className="modal-content" style={{ border: `1px solid ${COLORS.border}`, borderRadius: "12px", overflow: "hidden" }}>
-                <div className="modal-header" style={{ borderBottom: "none", paddingBottom: 0 }}>
-                  <h6 className="modal-title" style={{ fontWeight: 600, color: COLORS.primary }}>Confirm Archive</h6>
-                </div>
-                <div className="modal-body text-muted pt-2 pb-4">
-                  <p className="mb-0" style={{ fontSize: "0.95rem" }}>Are you sure you want to archive this item?</p>
-                </div>
-                <div className="modal-footer" style={{ borderTop: `1px solid ${COLORS.border}`, background: "#fafafa" }}>
-                  <button type="button" className="btn btn-sm btn-light" onClick={closeConfirm} style={{ border: `1px solid ${COLORS.border}`, fontWeight: 500 }}>
-                    Cancel
-                  </button>
-                  <button type="button" className="btn btn-sm" style={{ background: COLORS.delete, color: "#fff", fontWeight: 600 }} onClick={confirmArchive}>
-                    Archive Item
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* TOAST SYSTEM */}
-      {toast.show && (
-        <div
-          className="position-fixed bottom-0 end-0 m-4 p-3 rounded shadow-lg d-flex align-items-center gap-2"
-          style={{
-            background: toast.type === "success" ? "#4BB543" : "#F08080",
-            color: "#FFF",
-            minWidth: 260,
-            zIndex: 7000,
-            fontWeight: 500,
-            animation: "fadeIn 0.3s ease-out",
-          }}
-          role="alert"
-        >
-          <i className={`bi ${toast.type === "success" ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill"} fs-5`} />
-          <span style={{ fontSize: "0.95rem" }}>{toast.message}</span>
         </div>
       )}
 

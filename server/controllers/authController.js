@@ -256,10 +256,11 @@ const login = async (req, res) => {
 
     const accessToken = generateAccessToken(user);
 
+    const isProduction = process.env.NODE_ENV === "production";
     res.cookie("accessToken", accessToken, {
       httpOnly: true,
-      secure: true, // Set to true in production with HTTPS
-      sameSite: "none",
+      secure: isProduction, // Set to true in production with HTTPS
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 15 * 60 * 1000, // 15 min
     });
 
@@ -282,10 +283,11 @@ const login = async (req, res) => {
 };
 
 const logout = (req, res) => {
+  const isProduction = process.env.NODE_ENV === "production";
   res.clearCookie("accessToken", {
     httpOnly: true,
-    sameSite: "lax",
-    secure: false, // true in HTTPS production
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction, // true in HTTPS production
   });
 
   return res.status(200).json({ message: "Logged out successfully" });

@@ -15,6 +15,7 @@ function ForgotPassword() {
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
   const [emailMasked, setEmailMasked] = useState("");
+  const [showLoginIdHelper, setShowLoginIdHelper] = useState(false);
 
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -150,17 +151,55 @@ function ForgotPassword() {
 
         {step === 1 && (
           <form onSubmit={requestOtp}>
-            <div className="mb-3">
-              <label className="form-label" style={{ color: "#030303" }}>Login ID</label>
-              <input
-                className="form-control"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder=""
-                style={{ borderColor: "#D4C9BE", color: "#030303" }}
-                required
-                autoComplete="username"
-              />
+            <div className="mb-3 position-relative" >
+              <label className="form-label me-2" style={{ color: "#030303" }}>Login ID</label>
+
+              <div className="d-flex align-items-center gap-2">
+                {/* Actual input */}
+                <input
+                  className="form-control flex-grow-1"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder=""
+                  style={{ borderColor: "#D4C9BE", color: "#030303" }}
+                  required
+                  autoComplete="username"
+                />
+
+                {/* Info icon */}
+                <span
+                  style={{ cursor: "pointer", color: "#123458", display: "inline-block", position: "relative" }}
+                  onMouseEnter={() => setShowLoginIdHelper(true)}
+                  onMouseLeave={() => setShowLoginIdHelper(false)}
+                  onClick={() => setShowLoginIdHelper(prev => !prev)}
+                >
+                  <i className="bi bi-info-circle"></i>
+
+                  {/* Tooltip/Helper box */}
+                  {showLoginIdHelper && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "120%", // below icon
+                        left: 0,
+                        background: "#FFFFFF",
+                        border: "1px solid #D4C9BE",
+                        borderRadius: 6,
+                        padding: "8px 12px",
+                        width: 250,
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                        zIndex: 100,
+                        fontSize: "0.85rem",
+                        color: "#030303",
+                      }}
+                    >
+                      <div><b>For Student:</b> e.g. 2021-7134</div>
+                      <div><b>For Faculty / Visitor / Guard:</b> Your usual login username</div>
+                      <div>Enter your Login ID here to receive OTP.</div>
+                    </div>
+                  )}
+                </span>
+              </div>
             </div>
 
             <button
