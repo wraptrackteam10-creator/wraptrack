@@ -15,6 +15,6 @@ root.render(
 
 // Register the service worker
 // At the bottom of the file
-// serviceWorkerRegistration.register();
+serviceWorkerRegistration.register();
 
 reportWebVitals();
