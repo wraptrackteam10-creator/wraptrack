@@ -5,9 +5,13 @@ const {
   markAllNotificationsAsRead,
   deleteNotification,
   deleteAllNotifications,
+  createNotification,  // ← ADD THIS
 } = require("../controllers/notificationController");
 
 const router = express.Router();
+
+// ✅ Create a new notification
+router.post("/notifications", createNotification);  // ← ADD THIS
 
 // ✅ Get all notifications for a user
 router.get("/notifications/:userId", getNotificationsByUser);

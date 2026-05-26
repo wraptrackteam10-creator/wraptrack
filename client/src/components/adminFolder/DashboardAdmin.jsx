@@ -63,7 +63,7 @@ function DashboardAdmin() {
                 top: 0,
                 left: 0,
                 height: "100%",
-                width: "43%",
+                width: "75%",
                 maxWidth: 320,
                 backgroundColor: "#123458",
                 zIndex: 4050,

@@ -9,6 +9,7 @@ import ItemManagement from "./components/adminFolder/pages/ItemManagement";
 import Reports from "./components/adminFolder/pages/Reports";
 import Settings from "./components/adminFolder/pages/Settings";
 import Summary from "./components/adminFolder/pages/Summary";
+import AddAccount from "./components/adminFolder/pages/AddAccount";
 
 import DashboardUser from "./components/userFolder/DashboardUser";
 import UserHomePage from "./components/userFolder/pagesUser/UserHomePage";
@@ -102,6 +103,7 @@ function App() {
           <Route path="user-management" element={<UserManagement />} />
           <Route path="item-management" element={<ItemManagement />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="add-account" element={<AddAccount />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         

@@ -5,6 +5,9 @@ const connectDB = require("./config/db");
 const cron = require("node-cron");
 const cookieParser = require("cookie-parser");
 
+// ✅ ADD THIS LINE - IMPORT EVENT LISTENERS
+require("./controllers/eventListeners");
+
 const { 
   autoUpdateUnclaimedItems,
   autoApplyDailyPenalty, 
@@ -20,7 +23,7 @@ connectDB();
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:3000", "http://192.168.1.12:3000", "https://wraptrack.vercel.app"], // or your frontend URL
+  origin: ["http://localhost:3000", "http://10.0.1.119:3000", "https://wraptrack.vercel.app"], // or your frontend URL
   credentials: true,                                             // 🔥 REQUIRED for cookies
 })); 
 app.use(cookieParser());

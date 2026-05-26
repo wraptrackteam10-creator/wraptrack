@@ -1,5 +1,29 @@
 const Notification = require("../models/notificationModel");
 
+// ✅ Create a new notification
+const createNotification = async (req, res) => {
+  try {
+    const { userId, guestId, message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    const notification = new Notification({
+      userId: userId || null,
+      guestId: guestId || null,
+      message,
+      read: false,
+    });
+
+    await notification.save();
+    res.status(201).json({ message: "Notification created", notification });
+  } catch (error) {
+    console.error("Create notification error:", error);
+    res.status(500).json({ error: "Failed to create notification" });
+  }
+};
+
 // ✅ Get notifications for a specific user (sorted newest → oldest)
 const getNotificationsByUser = async (req, res) => {
   try {
@@ -80,4 +104,5 @@ module.exports = {
   markAllNotificationsAsRead,
   deleteNotification,
   deleteAllNotifications,
+  createNotification
 };

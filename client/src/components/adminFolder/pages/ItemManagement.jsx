@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { TiArrowUnsorted } from "react-icons/ti";
-import { FaSortUp } from "react-icons/fa6";
-import { FaSortDown } from "react-icons/fa6";
+import { FaSortUp, FaSortDown, FaUserCircle, FaBoxOpen, FaInfoCircle, FaMoneyBillWave, FaCalendarAlt, FaEdit, FaArchive, FaUndo, FaEye, FaEllipsisV } from "react-icons/fa";
+import { BsSearch, BsArrowCounterclockwise } from "react-icons/bs";
 import { CiFilter } from "react-icons/ci";
-import { BsSearch } from "react-icons/bs";
 import "bootstrap/dist/css/bootstrap.min.css";
 import ItemFilterPanel from "./ItemFilterPanel";
 import { fetchWithAuth } from "../../../utils/fetchWithAuth";
@@ -12,6 +11,7 @@ function ItemManagement() {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [sortField, setSortField] = useState(null); // null = neutral
   const [sortOrder, setSortOrder] = useState(null); // "asc" | "desc"
   const [editingItemId, setEditingItemId] = useState(null);
@@ -22,9 +22,13 @@ function ItemManagement() {
   // ARCHIVE modal state (replaces delete)
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archiveItemId, setArchiveItemId] = useState(null);
-
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [verifyItemId, setVerifyItemId] = useState(null);
+
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewItem, setViewItem] = useState(null);
+  const [showUnclaimedConfirm, setShowUnclaimedConfirm] = useState(false);
 
   // advanced filter state + panel visibility
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
@@ -43,6 +47,16 @@ function ItemManagement() {
 
   // selection state for archived items
   const [selectedArchivedIds, setSelectedArchivedIds] = useState([]);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  // PAGINATION state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Reset to page 1 when search or status filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, advancedFilters]);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
 
@@ -225,7 +239,7 @@ function ItemManagement() {
   });
 
   /* ---------- SORT ---------- */
-  const statusOrderAsc = ["Deposited", "Claimed", "Unclaimed"];
+  const statusOrderAsc = ["Deposited", "Claimed", "Sanctioned", "Unclaimed"];
   const statusOrderDesc = [...statusOrderAsc].reverse();
 
   if (sortField && sortOrder) {
@@ -254,11 +268,18 @@ function ItemManagement() {
     });
   }
 
+  // Final Paginated Set
+  const paginatedItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredItems.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredItems, currentPage, itemsPerPage]);
+
   /* ---------- ACTIONS ---------- */
   const handleEditClick = (item) => {
     const { photo, ...clean } = item;
     setEditingItemId(item._id);
     setEditedItem(clean);
+    setShowEditModal(true);
   };
 
   const handleSave = async () => {
@@ -274,10 +295,10 @@ function ItemManagement() {
 
       const updated = await res.json();
 
-      // Replace only the updated item in state (preserve other references).
       setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
       setEditingItemId(null);
       setEditedItem({});
+      setShowEditModal(false);
       showToast("Item updated successfully");
     } catch {
       showToast("Update failed", "danger");
@@ -304,6 +325,29 @@ function ItemManagement() {
     } finally {
       setArchiveItemId(null);
       setShowArchiveModal(false);
+    }
+  };
+
+  const handleUnclaimedVerify = async () => {
+    try {
+      const { photoUrl, ...clean } = viewItem;
+      const payload = { ...clean, status: "Sanctioned", penalty: 0 };
+
+      const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${viewItem._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const updated = await res.json();
+      setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+      showToast("Item successfully sanctioned and penalty removed.");
+    } catch {
+      showToast("Verification failed", "danger");
+    } finally {
+      setShowUnclaimedConfirm(false);
+      setShowViewModal(false);
     }
   };
 
@@ -520,12 +564,9 @@ function ItemManagement() {
 
   return (
     <div
-      className="d-flex container-fluid p-2"
+      className="container-fluid p-2 d-flex flex-column"
       style={{
-        minHeight: 0,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "auto",
+        height: "100%",
       }}
     >
       {/* HEADER */}
@@ -541,62 +582,158 @@ function ItemManagement() {
         </div>
 
         <div className="d-flex gap-2 align-items-center mt-2 mt-md-0 flex-wrap flex-md-nowrap">
-          <select
-            className="form-select"
-            style={{ maxWidth: 150, height: "37px", border: "1px solid #D4C9BE" }}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter by status"
-          >
-            <option>All</option>
-            <option>Deposited</option>
-            <option>Claimed</option>
-            <option>Unclaimed</option>
-          </select>
-
-          <div ref={filterButtonRef}>
+          <div className="position-relative" style={{ minWidth: 160, zIndex: 1045 }}>
             <button
-              className="btn d-inline-flex align-items-center"
+              className="btn shadow-sm w-100 d-flex justify-content-between align-items-center transition-hover"
+              style={{
+                height: "37px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                color: "#334155",
+                backgroundColor: "#fff",
+                padding: "0 12px"
+              }}
+              onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+            >
+              <div className="d-flex align-items-center gap-2">
+                {statusFilter}
+              </div>
+              <FaSortDown className="mb-1 text-muted" />
+            </button>
+            
+            {statusDropdownOpen && (
+              <>
+                <div 
+                  style={{ position: "fixed", inset: 0, zIndex: 1040 }} 
+                  onClick={() => setStatusDropdownOpen(false)}
+                />
+                <div 
+                  className="position-absolute shadow-lg p-2" 
+                  style={{
+                    top: "100%", left: 0, width: "200px", marginTop: "6px",
+                    backgroundColor: "#fff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "12px",
+                    zIndex: 1050,
+                    display: "flex", flexDirection: "column", gap: "6px"
+                  }}
+                >
+                  <div className="text-muted small fw-bold px-2 pb-1" style={{ fontSize: "0.7rem", letterSpacing: "0.5px" }}>FILTER BY STATUS</div>
+                  {[
+                    { value: "All", label: "All Statuses", color: "#64748b", bg: "#f1f5f9" },
+                    { value: "Deposited", label: "Deposited", color: "#3b82f6", bg: "#eff6ff" },
+                    { value: "Claimed", label: "Claimed", color: "#10b981", bg: "#ecfdf5" },
+                    { value: "Sanctioned", label: "Sanctioned", color: "#f59e0b", bg: "#fffbeb" },
+                    { value: "Unclaimed", label: "Unclaimed", color: "#ef4444", bg: "#fef2f2" }
+                  ].map((opt) => (
+                    <div
+                      key={opt.value}
+                      className="p-2 rounded d-flex align-items-center gap-2 transition-hover"
+                      style={{
+                        cursor: "pointer",
+                        backgroundColor: statusFilter === opt.value ? opt.bg : "transparent",
+                        color: statusFilter === opt.value ? opt.color : "#475569",
+                        fontWeight: statusFilter === opt.value ? "600" : "500",
+                        border: statusFilter === opt.value ? `1px solid ${opt.color}40` : "1px solid transparent",
+                      }}
+                      onClick={() => {
+                        setStatusFilter(opt.value);
+                        setStatusDropdownOpen(false);
+                      }}
+                      onMouseEnter={(e) => {
+                        if(statusFilter !== opt.value) e.currentTarget.style.backgroundColor = "#f8fafc";
+                      }}
+                      onMouseLeave={(e) => {
+                        if(statusFilter !== opt.value) e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: opt.color }}></div>
+                      {opt.label}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div ref={filterButtonRef} style={{ position: "relative" }}>
+            <button
+              className="btn shadow-sm d-inline-flex align-items-center transition-hover"
               onClick={() => setFilterPanelOpen((v) => !v)}
               title="Advanced filters"
               style={{
-                border: filterPanelOpen ? "2px solid #123458" : "1px solid #D4C9BE",
-                background: activeFilterCount > 0 ? "#123458" : "#fff",
-                color: activeFilterCount > 0 ? "#F1EFEC" : "#123458",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                background: activeFilterCount > 0 ? "#123458" : filterPanelOpen ? "#f1f5f9" : "#fff",
+                color: activeFilterCount > 0 ? "#fff" : "#334155",
                 height: "37px",
-                padding: "0 10px",
+                padding: "0 14px",
                 whiteSpace: "nowrap",
+                cursor: "pointer",
               }}
               aria-expanded={filterPanelOpen}
             >
-              <CiFilter style={{ marginRight: 8 }} /> Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+              <CiFilter size={20} />
+              <span className="d-none d-md-inline ms-1">Filters</span>
+              {activeFilterCount > 0 && (
+                <span 
+                  className="position-absolute badge rounded-pill"
+                  style={{ 
+                    top: "-4px",
+                    right: "2px",
+                    background: "#F08080", 
+                    fontSize: "0.65rem",
+                    border: "2px solid #fff",
+                    zIndex: 1,
+                    padding: "4px 6px"
+                  }}
+                >
+                  {activeFilterCount}
+                </span>
+              )}
             </button>
           </div>
 
           <button
-            className="form-control btn "
-            style={{ height: "37px", width: "62px", border: "1px solid #D4C9BE" }}
+            className="btn shadow-sm d-inline-flex align-items-center justify-content-center transition-hover"
+            style={{ 
+              height: "37px", 
+              minWidth: "42px", 
+              border: "1px solid #e2e8f0", 
+              borderRadius: "8px",
+              backgroundColor: "#fff",
+              color: "#64748b" 
+            }}
             onClick={handleClearAll}
             title="Clear filters"
           >
-            Clear
+            <BsArrowCounterclockwise className="d-md-none" />
+            <span className="d-none d-md-inline">Clear</span>
           </button>
           
-          <div style={{ position: "relative", minWidth: 140, maxWidth: 264 }}>
+          <div className="shadow-sm" style={{ position: "relative", minWidth: 140, maxWidth: 264, borderRadius: "8px" }}>
             <BsSearch
               style={{
                 position: "absolute",
                 top: "50%",
-                left: "10px",
+                left: "12px",
                 transform: "translateY(-50%)",
-                color: "#6b6b6b",
+                color: "#94a3b8",
                 pointerEvents: "none",
               }}
             />
             <input
               className="form-control"
-              placeholder="Search"
-              style={{ width: "100%", border: "1px solid #D4C9BE", height: "37px", paddingLeft: "32px" }}
+              placeholder="Search..."
+              style={{ 
+                width: "100%", 
+                border: "1px solid #e2e8f0", 
+                borderRadius: "8px",
+                height: "37px", 
+                paddingLeft: "36px",
+                backgroundColor: "#fff",
+                color: "#334155"
+              }}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -606,14 +743,12 @@ function ItemManagement() {
 
       {/* TABLE CARD */}
       <div
-        className="rounded flex-column"
+        className="rounded d-flex flex-column flex-grow-1 shadow-sm"
         style={{
           background: "#FFF",
           border: "1px solid #D4C9BE",
-          display: "flex",
-          flexDirection: "column",
           minHeight: 0,
-          overflowY: "auto",
+          overflow: "hidden",
         }}
       >
         <div
@@ -708,8 +843,10 @@ function ItemManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredItems.map((i, idx) => (
-                      <tr key={i._id}>
+                    {paginatedItems.map((i, idx) => {
+                      const actualIdx = idx + 1 + (currentPage - 1) * itemsPerPage;
+                      return (
+                        <tr key={i._id}>
 
                         {/* INDEX OR CHECKBOX */}
                         <td>
@@ -721,7 +858,7 @@ function ItemManagement() {
                               aria-label={`Select archived item ${i.description}`}
                             />
                           ) : (
-                            idx + 1
+                            actualIdx
                           )}
                         </td>
 
@@ -737,161 +874,81 @@ function ItemManagement() {
 
                         {/* DESCRIPTION */}
                         <td>
-                          {editingItemId === i._id ? (
-                            <input
-                              className="form-control form-control-sm"
-                              value={editedItem.description || ""}
-                              onChange={(e) =>
-                                setEditedItem({ ...editedItem, description: e.target.value })
-                              }
-                            />
-                          ) : (
-                            i.description
-                          )}
+                          <div className="text-truncate" style={{ maxWidth: "200px" }} title={i.description}>
+                            {i.description}
+                          </div>
                         </td>
 
                         {/* OWNER */}
                         <td>
-                          {editingItemId === i._id ? (
-                            <div className="d-flex gap-1">
-                              <input
-                                className="form-control form-control-sm"
-                                value={editedItem.firstname || ""}
-                                placeholder="First"
-                                onChange={(e) =>
-                                  setEditedItem({ ...editedItem, firstname: e.target.value })
-                                }
-                              />
-                              <input
-                                className="form-control form-control-sm"
-                                value={editedItem.lastname || ""}
-                                placeholder="Last"
-                                onChange={(e) =>
-                                  setEditedItem({ ...editedItem, lastname: e.target.value })
-                                }
-                              />
-                            </div>
-                          ) : (
-                            `${i.firstname || ""} ${i.lastname || ""}`
-                          )}
+                          {`${i.firstname || ""} ${i.lastname || ""}`}
                         </td>
 
                         {/* DATE */}
                         <td>
-                          {editingItemId === i._id ? (
-                            <input
-                              type="date"
-                              className="form-control form-control-sm"
-                              value={(editedItem.createdAt || "").substring(0, 10)}
-                              onChange={(e) =>
-                                setEditedItem({
-                                  ...editedItem,
-                                  createdAt: new Date(e.target.value).toISOString(),
-                                })
-                              }
-                            />
-                          ) : (
-                            // show archivedAt when in archived mode and archivedAt exists
-                            new Date(advancedFilters.archived && i.archivedAt ? i.archivedAt : i.createdAt || 0).toLocaleDateString()
-                          )}
+                          {new Date(advancedFilters.archived && i.archivedAt ? i.archivedAt : i.createdAt || 0).toLocaleDateString()}
                         </td>
 
                         {/* PENALTY */}
-                        <td className="text-center" >
-                          {editingItemId === i._id ? (
-                            <input
-                              type="number"
-                              className="form-control form-control-sm"
-                              value={editedItem.penalty ?? 0}
-                              onChange={(e) =>
-                                setEditedItem({ ...editedItem, penalty: e.target.value })
-                              }
-                              
-                            />
-                          ) : (
-                            <small style={{ color: (i.penalty || 0) > 0 ? "red" : "", fontWeight: (i.penalty || 0) > 0 ? "bold" : "normal", padding: "2px 6px", }}>
-                              {i.penalty || 0}
-                            </small>
-                          )}
+                        <td className="text-center">
+                          <small style={{ color: (i.penalty || 0) > 0 ? "red" : "", fontWeight: (i.penalty || 0) > 0 ? "bold" : "normal", padding: "2px 6px" }}>
+                            {i.penalty || 0}
+                          </small>
                         </td>
                         
                         {/* STATUS */}
                         <td className="text-center">
-                          {editingItemId === i._id ? (
-                            <select
-                              className="form-select form-select-sm"
-                              value={editedItem.status || "Deposited"}
-                              onChange={(e) =>
-                                setEditedItem({ ...editedItem, status: e.target.value })
-                              }
-                            >
-                              <option value="Deposited">Deposited</option>
-                              <option value="Claimed">Claimed</option>
-                              <option value="Unclaimed">Unclaimed</option>
-                            </select>
-                          ) : (
-                            <span
-                              className="px-2 py-1 rounded small"
-                              style={{
-                                background:
-                                  i.status === "Claimed"
-                                    ? "#90EE90"
-                                    : i.status === "Deposited"
-                                    ? "#D4C9BE"
-                                    : "#F08080",
-                                color: i.status === "Unclaimed" ? "#F1EFEC" : "",
-                              }}
-                            >
-                              {i.status}
-                            </span>
-                          )}
+                          <span
+                            className="px-2 py-1 rounded small"
+                            style={{
+                              background:
+                                i.status === "Claimed"
+                                  ? "#90EE90"
+                                  : i.status === "Deposited"
+                                  ? "#D4C9BE"
+                                  : i.status === "Sanctioned"
+                                  ? "#17a2b8"
+                                  : "#F08080",
+                              color: (i.status === "Unclaimed" || i.status === "Sanctioned") ? "#F1EFEC" : "",
+                            }}
+                          >
+                            {i.status}
+                          </span>
                         </td>
 
                         {/* ACTIONS */}
                         <td className="text-center">
                           {advancedFilters.archived ? (
-                            // Archived view: show Unarchive button for each row
                             <div className="d-flex justify-content-center gap-2">
                               <button
                                 className="btn btn-sm"
-                                style={{
-                                  border: "1px solid #123458",
-                                  color: "#123458",
-                                }}
+                                style={{ border: "1px solid #123458", color: "#123458" }}
                                 onClick={() => performUnarchive(i._id)}
                               >
                                 Unarchive
                               </button>
                             </div>
-                          ) : editingItemId === i._id ? (
-                            <>
-                              <button
-                                className="btn btn-sm me-2"
-                                style={{ background: "#123458", color: "#F1EFEC" }}
-                                onClick={handleSave}
-                              >
-                                Save
-                              </button>
-                              <button
-                                className="btn btn-sm"
-                                style={{ border: "1px solid #D4C9BE" }}
-                                onClick={() => setEditingItemId(null)}
-                              >
-                                Cancel
-                              </button>
-                            </>
                           ) : (
-                            <>
+                            <div className="d-flex justify-content-center gap-1">
                               <button
-                                className="btn btn-sm me-2"
+                                className="btn btn-sm rounded-2"
+                                style={{ border: "1px solid #17a2b8", color: "#17a2b8" }}
+                                onClick={() => {
+                                  setViewItem(i);
+                                  setShowViewModal(true);
+                                }}
+                              >
+                                View
+                              </button>
+                              <button
+                                className="btn btn-sm rounded-2"
                                 style={{ border: "1px solid #123458", color: "#123458" }}
                                 onClick={() => handleEditClick(i)}
                               >
                                 Edit
                               </button>
-
                               <button
-                                className="btn btn-sm me-2"
+                                className="btn btn-sm rounded-2"
                                 style={{ border: "1px solid #F08080", color: "#F08080" }}
                                 onClick={() => {
                                   setArchiveItemId(i._id);
@@ -900,32 +957,22 @@ function ItemManagement() {
                               >
                                 Archive
                               </button>
-                              {i.status !== "Claimed" && (
-                                <button
-                                  className="btn btn-sm "
-                                  style={{ border: "1px solid green", color: "green" }}
-                                  onClick={() => {
-                                    setVerifyItemId(i._id);
-                                    setShowVerifyModal(true);
-                                  }}
-                                >
-                                  Verify
-                                </button>
-                              )}
-                            </>
+                            </div>
                           )}
                         </td>
                       </tr>
-                    ))}
+                    );
+                  })}
                   </tbody>
                 </table>
               </div>
 
               {/* Mobile list (below md): stacked cards */}
               <div className="d-block d-md-none p-2">
-                {filteredItems.length === 0 && <p className="text-center p-2">No items found.</p>}
-                {filteredItems.map((i, idx) => {
+                {paginatedItems.length === 0 && <p className="text-center p-2">No items found.</p>}
+                {paginatedItems.map((i, idx) => {
                   const isEditing = editingItemId === i._id;
+                  const actualIdx = idx + 1 + (currentPage - 1) * itemsPerPage;
                   return (
                     <div key={i._id} className="card mb-2">
                       <div className="card-body p-2">
@@ -939,7 +986,13 @@ function ItemManagement() {
                           <div className="flex-grow-1">
                             <div className="d-flex justify-content-between align-items-start">
                               <div>
-                                <strong className="d-block">{i.description}</strong>
+                                <strong 
+                                  className="d-block text-truncate" 
+                                  style={{ maxWidth: "160px" }}
+                                  title={i.description}
+                                >
+                                  {i.description}
+                                </strong>
                                 <small className="text-muted">{i.firstname || ""} {i.lastname || ""}</small>
                               </div>
                               <div className="text-end">
@@ -955,131 +1008,100 @@ function ItemManagement() {
                                       aria-label={`Select archived item ${i.description}`}
                                     />
                                   ) : (
-                                    <small className="text-muted">#{idx + 1}</small>
+                                    <small className="text-muted">#{actualIdx}</small>
                                   )}
                                 </div>
                               </div>
                             </div>
 
-                            <div className="d-flex gap-2 align-items-center mt-2 flex-wrap">
-                              <small className="px-2 py-1 rounded small border">
-                                Penalty: {i.penalty || 0}
-                              </small>
+                            <div className="d-flex gap-2 align-items-center mt-2 flex-nowrap justify-content-between">
+                              <div className="d-flex gap-1 align-items-center flex-shrink-1 overflow-hidden">
+                                <small 
+                                  className="px-2 py-1 rounded-pill border fw-medium text-muted" 
+                                  style={{ fontSize: "0.7rem", backgroundColor: "#f8f9fa", whiteSpace: "nowrap" }}
+                                >
+                                  Penalty: {i.penalty || 0}
+                                </small>
 
-                              <span
-                                className="px-2 py-1 rounded small"
-                                style={{
-                                  background:
-                                    i.status === "Claimed"
-                                      ? "#90EE90"
-                                      : i.status === "Deposited"
-                                      ? "#D4C9BE"
-                                      : "#F08080",
-                                  color: i.status === "Unclaimed" ? "#F1EFEC" : "",
-                                }}
-                              >
-                                {i.status}
-                              </span>
+                                <span
+                                  className="px-2 py-1 rounded-pill fw-medium"
+                                  style={{
+                                    fontSize: "0.7rem",
+                                    background: i.status === "Claimed" ? "#e1f7e1" : i.status === "Deposited" ? "#eeeae5" : i.status === "Sanctioned" ? "#e0f2f1" : "#ffebee",
+                                    color: i.status === "Claimed" ? "#2e7d32" : i.status === "Deposited" ? "#5d5d5d" : i.status === "Sanctioned" ? "#00796b" : "#c62828",
+                                    border: `1px solid ${i.status === "Claimed" ? "#c3e6cb" : i.status === "Deposited" ? "#d4c9be" : i.status === "Sanctioned" ? "#b2dfdb" : "#ffcdd2"}`,
+                                    whiteSpace: "nowrap"
+                                  }}
+                                >
+                                  {i.status}
+                                </span>
+                              </div>
 
-                              <div className="ms-auto d-flex gap-1">
+                              <div className="d-flex gap-2 align-items-center position-relative flex-shrink-0">
                                 {advancedFilters.archived ? (
                                   <button
-                                    className="btn btn-sm"
-                                    style={{
-                                      border: "1px solid #123458",
-                                      color: "#123458",
-                                    }}
+                                    className="btn btn-sm d-flex align-items-center justify-content-center p-2 rounded-2 shadow-sm"
+                                    style={{ border: "1px solid #123458", color: "#123458", width: "32px", height: "32px" }}
                                     onClick={() => performUnarchive(i._id)}
+                                    title="Unarchive"
                                   >
-                                    Unarchive
+                                    <FaUndo size={14} />
                                   </button>
-                                ) : isEditing ? (
-                                  <>
-                                    <button
-                                      className="btn btn-sm"
-                                      style={{ background: "#123458", color: "#fff" }}
-                                      onClick={handleSave}
-                                    >
-                                      Save
-                                    </button>
-                                    <button className="btn btn-sm border" onClick={() => setEditingItemId(null)}>
-                                      Cancel
-                                    </button>
-                                  </>
                                 ) : (
                                   <>
                                     <button
-                                      className="btn btn-sm"
-                                      style={{ border: "1px solid #123458", color: "#123458" }}
-                                      onClick={() => handleEditClick(i)}
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      className="btn btn-sm"
-                                      style={{ border: "1px solid #F08080", color: "#F08080" }}
+                                      className="btn btn-sm d-flex align-items-center justify-content-center p-2 rounded-2 shadow-sm"
+                                      style={{ border: "1px solid #17a2b8", color: "#17a2b8", width: "32px", height: "32px" }}
                                       onClick={() => {
-                                        setArchiveItemId(i._id);
-                                        setShowArchiveModal(true);
+                                        setViewItem(i);
+                                        setShowViewModal(true);
                                       }}
+                                      title="View Details"
                                     >
-                                      Archive
+                                      <FaEye size={14} />
                                     </button>
-                                    {i.status !== "Claimed" && (
+
+                                    <div className="position-relative">
                                       <button
-                                        className="btn btn-sm"
-                                        style={{ border: "1px solid green", color: "green" }}
-                                        onClick={() => {
-                                          setVerifyItemId(i._id);
-                                          setShowVerifyModal(true);
-                                        }}
+                                        className="btn btn-sm d-flex align-items-center justify-content-center p-2 rounded-2 shadow-sm"
+                                        style={{ border: "1px solid #6c757d", color: "#6c757d", width: "32px", height: "32px" }}
+                                        onClick={() => setActiveMenuId(activeMenuId === i._id ? null : i._id)}
                                       >
-                                        Verify
+                                        <FaEllipsisV size={14} />
                                       </button>
-                                    )}
+
+                                      {activeMenuId === i._id && (
+                                        <div 
+                                          className="position-absolute bg-white shadow rounded border p-1 d-flex flex-column gap-1"
+                                          style={{ right: 0, top: "36px", zIndex: 100, minWidth: "100px" }}
+                                        >
+                                          <button
+                                            className="btn btn-sm d-flex align-items-center gap-2 text-start p-2 hover-bg-light"
+                                            style={{ color: "#123458" }}
+                                            onClick={() => {
+                                              handleEditClick(i);
+                                              setActiveMenuId(null);
+                                            }}
+                                          >
+                                            <FaEdit size={12} /> Edit
+                                          </button>
+                                          <button
+                                            className="btn btn-sm d-flex align-items-center gap-2 text-start p-2 text-danger hover-bg-light"
+                                            onClick={() => {
+                                              setArchiveItemId(i._id);
+                                              setShowArchiveModal(true);
+                                              setActiveMenuId(null);
+                                            }}
+                                          >
+                                            <FaArchive size={12} /> Archive
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   </>
                                 )}
                               </div>
                             </div>
-
-                            {/* Inline edit fields on mobile */}
-                            {isEditing && (
-                              <div className="mt-2">
-                                <div className="mb-1">
-                                  <input
-                                    className="form-control form-control-sm"
-                                    value={editedItem.description || ""}
-                                    onChange={(e) =>
-                                      setEditedItem((prev) => ({ ...prev, description: e.target.value }))
-                                    }
-                                    placeholder="Description"
-                                  />
-                                </div>
-                                <div className="mb-1 d-flex gap-1">
-                                  <input
-                                    className="form-control form-control-sm"
-                                    value={editedItem.firstname || ""}
-                                    onChange={(e) => setEditedItem((prev) => ({ ...prev, firstname: e.target.value }))}
-                                    placeholder="First name"
-                                  />
-                                  <input
-                                    className="form-control form-control-sm"
-                                    value={editedItem.lastname || ""}
-                                    onChange={(e) => setEditedItem((prev) => ({ ...prev, lastname: e.target.value }))}
-                                    placeholder="Last name"
-                                  />
-                                </div>
-                                <div className="mb-1">
-                                  <input
-                                    type="number"
-                                    className="form-control form-control-sm"
-                                    value={editedItem.penalty ?? 0}
-                                    onChange={(e) => setEditedItem((prev) => ({ ...prev, penalty: e.target.value }))}
-                                    placeholder="Penalty"
-                                  />
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -1091,12 +1113,77 @@ function ItemManagement() {
           )}
         </div>
 
-        <div
-          className="px-3 py-2 small"
-          style={{ borderTop: "1px solid #D4C9BE", color: "#D4C9BE" }}
-        >
-          Showing {filteredItems.length} of {visibleItems.length} items • Updated{" "}
-          {timeAgo(getLastUpdated())}
+        <div className="px-2 py-2 border-top d-flex flex-wrap justify-content-between align-items-center gap-2 bg-light mt-auto" style={{ borderRadius: "0 0 8px 8px" }}>
+          {/* Result Count & Rows Selector (Compact on Mobile) */}
+          <div className="d-flex align-items-center gap-2 flex-grow-1">
+            <div className="small fw-medium text-dark text-nowrap d-none d-sm-block" style={{ fontSize: "0.85rem" }}>
+              <span className="d-none d-sm-inline text-muted fw-normal">Found</span> {filteredItems.length}{" "}
+              <span className="d-none d-sm-inline text-muted fw-normal">items.</span>{" "}
+              <span className="fw-bold">{filteredItems.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)}</span>
+              <span className="text-muted fw-normal ms-1">of {filteredItems.length}</span>
+            </div>
+
+            <div className="d-flex align-items-center gap-1 ms-auto ms-sm-2">
+              <small className="text-muted d-none d-sm-inline" style={{ fontSize: "0.75rem" }}>Rows:</small>
+              <select
+                className="form-select form-select-sm py-0 px-1"
+                style={{ width: "55px", fontSize: "0.75rem", height: "24px", border: "1px solid #D4C9BE" }}
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="d-flex align-items-center gap-1">
+            <button
+              className="btn btn-sm py-1 px-2 border d-flex align-items-center gap-1"
+              style={{ fontSize: "0.8rem", background: "#fff", borderColor: "#D4C9BE" }}
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => p - 1)}
+            >
+              Prev
+            </button>
+
+            <div className="d-none d-sm-flex gap-1 mx-1">
+              {Array.from({ length: Math.ceil(filteredItems.length / itemsPerPage) }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === Math.ceil(filteredItems.length / itemsPerPage) || Math.abs(p - currentPage) <= 1)
+                .map((p, idx, arr) => (
+                  <React.Fragment key={p}>
+                    {idx > 0 && arr[idx - 1] !== p - 1 && <span className="text-muted px-1 small">...</span>}
+                    <button
+                      className={`btn btn-sm py-0 px-2 ${currentPage === p ? "btn-dark" : "btn-light border"}`}
+                      style={{ fontSize: "0.75rem", height: "24px", minWidth: "24px" }}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  </React.Fragment>
+                ))}
+            </div>
+
+            {/* Mobile simplified page indicator */}
+            <div className="d-flex d-sm-none align-items-center px-2 small text-muted" style={{ fontSize: "0.75rem" }}>
+              Page {currentPage} of {Math.max(1, Math.ceil(filteredItems.length / itemsPerPage))}
+            </div>
+
+            <button
+              className="btn btn-sm py-1 px-2 border d-flex align-items-center gap-1"
+              style={{ fontSize: "0.8rem", background: "#fff", borderColor: "#D4C9BE" }}
+              disabled={currentPage >= Math.ceil(filteredItems.length / itemsPerPage)}
+              onClick={() => setCurrentPage((p) => p + 1)}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1156,6 +1243,188 @@ function ItemManagement() {
         </div>
       )}
 
+      {/* VIEW MODAL */}
+      {showViewModal && viewItem && (
+        <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 1060 }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "16px", overflow: "hidden" }}>
+              <div className="modal-header border-0 bg-white px-4 pt-4 pb-0">
+                <div className="d-flex align-items-center gap-2">
+                  <div className="rounded-circle p-2" style={{ background: "#f0f2f5" }}>
+                    <FaInfoCircle size={20} style={{ color: "#123458" }} />
+                  </div>
+                  <h5 className="modal-title fw-bold" style={{ color: "#123458" }}>Item Details</h5>
+                </div>
+                <button 
+                  type="button" 
+                  className="btn-close shadow-none" 
+                  onClick={() => setShowViewModal(false)}
+                  style={{ fontSize: "0.8rem" }}
+                ></button>
+              </div>
+
+              <div className="modal-body p-0">
+                <div className="row g-0">
+                  {/* Left Column: Image Area */}
+                  <div className="col-lg-5 col-12" style={{ background: "#f8fafc", minHeight: "350px" }}>
+                    <div className="h-100 d-flex flex-column align-items-center justify-content-center p-4">
+                      <div className="position-relative w-100 shadow-sm rounded-4 overflow-hidden" style={{ aspectRatio: "1/1", border: "4px solid #fff" }}>
+                        <img
+                          src={viewItem.photoUrl || "/logo.png"}
+                          alt={viewItem.description}
+                          className="w-100 h-100"
+                          style={{ objectFit: "cover" }}
+                        />
+                      </div>
+                      <div className="mt-3 text-center">
+                        <span className="badge px-3 py-2 rounded-pill shadow-sm" style={{
+                          fontSize: "0.85rem",
+                          background: viewItem.status === "Claimed" ? "#e6f4ea" : 
+                                     viewItem.status === "Deposited" ? "#f1f3f4" : 
+                                     viewItem.status === "Sanctioned" ? "#e8f0fe" : "#fce8e6",
+                          color: viewItem.status === "Claimed" ? "#1e7e34" : 
+                                 viewItem.status === "Deposited" ? "#5f6368" : 
+                                 viewItem.status === "Sanctioned" ? "#1a73e8" : "#d93025",
+                          fontWeight: "600",
+                          border: `1px solid ${
+                            viewItem.status === "Claimed" ? "#ceead6" : 
+                            viewItem.status === "Deposited" ? "#dadce0" : 
+                            viewItem.status === "Sanctioned" ? "#d2e3fc" : "#fad2cf"
+                          }`
+                        }}>
+                          {viewItem.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Details Area */}
+                  <div className="col-lg-7 col-12 p-4 bg-white">
+                    <div className="d-flex flex-column gap-4">
+                      {/* Description Section */}
+                      <div className="detail-item">
+                        <label className="text-muted small fw-bold text-uppercase mb-1 d-block">
+                          <FaBoxOpen className="me-2" /> Description
+                        </label>
+                        <h4 className="fw-bold mb-0" style={{ color: "#1e293b", lineHeight: "1.3" }}>
+                          {viewItem.description}
+                        </h4>
+                      </div>
+
+                      <div className="row g-4">
+                        {/* Owner Section */}
+                        <div className="col-sm-6">
+                          <label className="text-muted small fw-bold text-uppercase mb-1 d-block">
+                            <FaUserCircle className="me-2" /> Owner
+                          </label>
+                          <div className="fw-semibold text-dark" style={{ fontSize: "1.05rem" }}>
+                            {viewItem.firstname || "Unknown"} {viewItem.lastname || ""}
+                          </div>
+                        </div>
+
+                        {/* Date Section */}
+                        <div className="col-sm-6">
+                          <label className="text-muted small fw-bold text-uppercase mb-1 d-block">
+                            <FaCalendarAlt className="me-2" /> Date Deposited
+                          </label>
+                          <div className="fw-semibold text-dark" style={{ fontSize: "1.05rem" }}>
+                            {new Date(viewItem.createdAt || 0).toLocaleDateString("en-PH", { 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Penalty Section */}
+                        <div className="col-sm-6">
+                          <label className="text-muted small fw-bold text-uppercase mb-1 d-block">
+                            <FaMoneyBillWave className="me-2" /> Current Penalty
+                          </label>
+                          <div className={`fw-bold ${Number(viewItem.penalty) > 0 ? 'text-danger' : 'text-success'}`} style={{ fontSize: "1.2rem" }}>
+                            ₱{viewItem.penalty || 0}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Additional Info / ID */}
+                      <div className="mt-2 p-3 rounded-3" style={{ background: "#f8fafc", border: "1px dashed #e2e8f0" }}>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span className="text-muted small">Item Reference ID:</span>
+                          <span className="font-monospace small fw-medium">{viewItem._id.slice(-8).toUpperCase()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer border-0 bg-white px-4 pb-4 pt-2">
+                <div className="d-flex w-100 gap-2">
+                  <button 
+                    className="btn btn-light px-4 fw-semibold flex-grow-1" 
+                    onClick={() => setShowViewModal(false)}
+                    style={{ borderRadius: "10px", height: "48px" }}
+                  >
+                    Close
+                  </button>
+                  {viewItem.status === "Deposited" && (
+                    <button
+                      className="btn px-4 fw-semibold flex-grow-1"
+                      style={{ background: "#123458", color: "#fff", borderRadius: "10px", height: "48px" }}
+                      onClick={() => {
+                        setShowViewModal(false);
+                        setVerifyItemId(viewItem._id);
+                        setShowVerifyModal(true);
+                      }}
+                    >
+                      Verify Claim
+                    </button>
+                  )}
+                  {viewItem.status === "Unclaimed" && (
+                    <button
+                      className="btn px-4 fw-semibold flex-grow-1"
+                      style={{ background: "#1e7e34", color: "#fff", borderRadius: "10px", height: "48px" }}
+                      onClick={() => {
+                        setShowViewModal(false);
+                        setShowUnclaimedConfirm(true);
+                      }}
+                    >
+                      Verify for Sanction
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UNCLAIMED VERIFY CONFIRM MODAL */}
+      {showUnclaimedConfirm && (
+        <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,.5)" }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5>Confirm Verification</h5>
+              </div>
+              <div className="modal-body">
+                <p>Are you sure you want to verify this Unclaimed item?</p>
+                <p className="text-muted small">This will change the status to "Sanctioned" and remove any penalty.</p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn border" onClick={() => setShowUnclaimedConfirm(false)}>
+                  Cancel
+                </button>
+                <button className="btn" style={{backgroundColor: "#123458", color: "#fff"}} onClick={handleUnclaimedVerify}>
+                  Yes, Verify
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VERIFY MODAL */}
       {showVerifyModal && (
         <div
@@ -1177,6 +1446,81 @@ function ItemManagement() {
                 </button>
                 <button className="btn" style={{backgroundColor: "#123458", color: "#fff"}} onClick={handleVerify}>
                   Yes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL */}
+      {showEditModal && (
+        <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,.5)", zIndex: 1050 }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "15px" }}>
+              <div className="modal-header border-0 px-4 pt-4">
+                <h5 className="modal-title fw-bold" style={{ color: "#123458" }}>Edit Item</h5>
+                <button type="button" className="btn-close" onClick={() => setShowEditModal(false)}></button>
+              </div>
+              <div className="modal-body px-4">
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-muted text-uppercase">Description</label>
+                  <input
+                    type="text"
+                    className="form-control rounded-3"
+                    value={editedItem.description || ""}
+                    onChange={(e) => setEditedItem({ ...editedItem, description: e.target.value })}
+                  />
+                </div>
+                <div className="row g-3 mb-3">
+                  <div className="col-6">
+                    <label className="form-label small fw-bold text-muted text-uppercase">First Name</label>
+                    <input
+                      type="text"
+                      className="form-control rounded-3"
+                      value={editedItem.firstname || ""}
+                      onChange={(e) => setEditedItem({ ...editedItem, firstname: e.target.value })}
+                    />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label small fw-bold text-muted text-uppercase">Last Name</label>
+                    <input
+                      type="text"
+                      className="form-control rounded-3"
+                      value={editedItem.lastname || ""}
+                      onChange={(e) => setEditedItem({ ...editedItem, lastname: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-muted text-uppercase">Status</label>
+                  <select
+                    className="form-select rounded-3"
+                    value={editedItem.status || ""}
+                    onChange={(e) => setEditedItem({ ...editedItem, status: e.target.value })}
+                  >
+                    <option value="Deposited">Deposited</option>
+                    <option value="Claimed">Claimed</option>
+                    <option value="Unclaimed">Unclaimed</option>
+                    <option value="Sanctioned">Sanctioned</option>
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-muted text-uppercase">Penalty (₱)</label>
+                  <input
+                    type="number"
+                    className="form-control rounded-3"
+                    value={editedItem.penalty || 0}
+                    onChange={(e) => setEditedItem({ ...editedItem, penalty: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer border-0 px-4 pb-4">
+                <button className="btn btn-light px-4 flex-grow-1 fw-bold" onClick={() => setShowEditModal(false)} style={{ borderRadius: "10px" }}>
+                  Cancel
+                </button>
+                <button className="btn px-4 flex-grow-1 fw-bold text-white" onClick={handleSave} style={{ backgroundColor: "#123458", borderRadius: "10px" }}>
+                  Save Changes
                 </button>
               </div>
             </div>

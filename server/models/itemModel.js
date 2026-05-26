@@ -19,7 +19,7 @@ const itemSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Deposited", "Unclaimed", "Claimed", "Pending Verification"],
+      enum: ["Deposited", "Unclaimed", "Claimed", "Pending Verification", "Sanctioned"],
       default: "Deposited",
     },
 

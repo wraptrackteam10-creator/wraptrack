@@ -359,6 +359,11 @@ function GuardItemManagement() {
     return count;
   }, [dateFilter, statusFilter, advancedFilters]);
 
+  const isAllSelected = useMemo(() => {
+    const ids = filteredItems.map((u) => u._id);
+    return ids.length > 0 && ids.every((id) => selectedArchivedIds.includes(id));
+  }, [filteredItems, selectedArchivedIds]);
+
   // Guard access disabled
   if (!loadingSettings && !settings?.guardAccess) {
     return (
@@ -472,10 +477,6 @@ function GuardItemManagement() {
     else setSelectedArchivedIds(ids);
   };
 
-  const isAllSelected = useMemo(() => {
-    const ids = filteredItems.map((u) => u._id);
-    return ids.length > 0 && ids.every((id) => selectedArchivedIds.includes(id));
-  }, [filteredItems, selectedArchivedIds]);
 
   return (
     <div className="d-flex flex-column" style={{ height: "100%", backgroundColor: "#F1EFEC", color: "#030303" }}>

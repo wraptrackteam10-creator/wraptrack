@@ -57,12 +57,63 @@
         <div className="d-flex flex-column p-3 mt-3" style={{ gap: 8 }}>
           {/* Main nav */}
           <ul className="nav flex-column gap-1" style={{ margin: 0, padding: 0 }}>
+            {/* MAIN MENU */}
+            <div className="small text-uppercase fw-bold mt-2 mb-1 px-3" style={{ color: "rgba(212, 201, 190, 0.6)", letterSpacing: "1px", fontSize: "0.75rem" }}>Main Menu</div>
             {[
               { to: "/admin/home", icon: "bi-house-door-fill", label: "Home" },
+              { to: "/admin/reports", icon: "bi-graph-up", label: "Reports" },
+            ].map((item) => (
+              <li key={item.to} className="nav-item">
+                <NavLink
+                  to={item.to}
+                  style={({ isActive }) => ({
+                    ...linkBaseStyle,
+                    color: isActive ? "#F1EFEC" : "#D4C9BE",
+                    fontWeight: isActive ? "600" : "400",
+                    backgroundColor: isActive ? "rgba(241,239,236,0.12)" : "transparent",
+                  })}
+                  className="d-flex align-items-center"
+                  onClick={() => {
+                    if (mobile && onClose) onClose();
+                  }}
+                >
+                  <i className={`bi ${item.icon}`} />
+                  <span>{item.label}</span>
+                </NavLink>
+              </li>
+            ))}
+
+            {/* MANAGEMENT */}
+            <div className="small text-uppercase fw-bold mt-4 mb-1 px-3" style={{ color: "rgba(212, 201, 190, 0.6)", letterSpacing: "1px", fontSize: "0.75rem" }}>Management</div>
+            {[
               { to: "/admin/user-management", icon: "bi-people-fill", label: "Users" },
               { to: "/admin/item-management", icon: "bi-box-seam", label: "Items" },
-              { to: "/admin/reports", icon: "bi-graph-up", label: "Reports" },
-              { to: "/admin/settings", icon: "bi-gear-fill", label: "Settings" },
+            ].map((item) => (
+              <li key={item.to} className="nav-item">
+                <NavLink
+                  to={item.to}
+                  style={({ isActive }) => ({
+                    ...linkBaseStyle,
+                    color: isActive ? "#F1EFEC" : "#D4C9BE",
+                    fontWeight: isActive ? "600" : "400",
+                    backgroundColor: isActive ? "rgba(241,239,236,0.12)" : "transparent",
+                  })}
+                  className="d-flex align-items-center"
+                  onClick={() => {
+                    if (mobile && onClose) onClose();
+                  }}
+                >
+                  <i className={`bi ${item.icon}`} />
+                  <span>{item.label}</span>
+                </NavLink>
+              </li>
+            ))}
+
+            {/* ADMINISTRATION */}
+            <div className="small text-uppercase fw-bold mt-4 mb-1 px-3" style={{ color: "rgba(212, 201, 190, 0.6)", letterSpacing: "1px", fontSize: "0.75rem" }}>Administration</div>
+            {[
+              { to: "/admin/add-account", icon: "bi-person-plus-fill", label: "Add Account" },
+              // { to: "/admin/settings", icon: "bi-gear-fill", label: "Settings" },
             ].map((item) => (
               <li key={item.to} className="nav-item">
                 <NavLink

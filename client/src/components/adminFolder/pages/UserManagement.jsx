@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import UserFilterPanel from "./UserFilterPanel";
-import { BsSearch } from "react-icons/bs";
+import { BsSearch, BsArrowCounterclockwise } from "react-icons/bs";
 import { CiFilter } from "react-icons/ci";
+import { FaSortUp, FaSortDown, FaUser, FaEnvelope, FaUserTag, FaShieldAlt, FaToggleOn, FaSave, FaTimes, FaArchive, FaFilter, FaEdit, FaUndo, FaEllipsisV } from "react-icons/fa";
 import { TiArrowUnsorted } from "react-icons/ti";
-import { FaSortUp, FaSortDown } from "react-icons/fa6";
 import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 /**
@@ -25,6 +25,7 @@ function UserManagement() {
 
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [userToArchive, setUserToArchive] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const [sortField, setSortField] = useState(null); // "date" | "type" | "status"
   const [sortOrder, setSortOrder] = useState(null); // "asc" | "desc"
@@ -41,6 +42,11 @@ function UserManagement() {
   const filterButtonRef = useRef(null);
 
   const [selectedArchivedIds, setSelectedArchivedIds] = useState([]); // NEW: selection for archived users
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [usersPerPage, setUsersPerPage] = useState(10);
+  const [activeMenuId, setActiveMenuId] = useState(null);
 
   const API_BASE_URL =
     process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
@@ -95,6 +101,13 @@ function UserManagement() {
   const handleEditClick = (user) => {
     setEditingUserId(user._id);
     setEditedUser(JSON.parse(JSON.stringify(user)));
+    setShowEditModal(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setEditingUserId(null);
+    setEditedUser({});
   };
 
   const handleCredChange = (field, value) => {
@@ -185,6 +198,7 @@ function UserManagement() {
 
       setEditingUserId(null);
       setEditedUser({});
+      setShowEditModal(false);
       showToast("User updated successfully");
     } catch {
       showToast("Update failed", "danger");
@@ -291,7 +305,7 @@ function UserManagement() {
     );
   }, [users, userAdvancedFilters.archived]);
 
-  const isoDateFor = (u) => {
+  const isoDateFor = useCallback((u) => {
     if (userAdvancedFilters.archived && u.archivedAt) {
       try {
         return new Date(u.archivedAt).toISOString().slice(0, 10);
@@ -303,7 +317,7 @@ function UserManagement() {
     } catch {
       return "";
     }
-  };
+  }, [userAdvancedFilters.archived]);
 
   const filteredUsers = useMemo(() => {
     return visibleUsers.filter((u) => {
@@ -336,7 +350,7 @@ function UserManagement() {
       }
       return true;
     });
-  }, [visibleUsers, search, dateFilter, userAdvancedFilters]);
+  }, [visibleUsers, search, dateFilter, userAdvancedFilters, isoDateFor]);
 
   /* ---------------- SORTING ---------------- */
   const sortedUsers = useMemo(() => {
@@ -375,6 +389,35 @@ function UserManagement() {
     }
     return sorted;
   }, [filteredUsers, sortField, sortOrder, userAdvancedFilters.archived]);
+
+  /* ---------------- PAGINATION LOGIC ---------------- */
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, dateFilter, userAdvancedFilters]);
+
+  const totalPages = Math.ceil(sortedUsers.length / usersPerPage);
+  
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * usersPerPage;
+    return sortedUsers.slice(start, start + usersPerPage);
+  }, [sortedUsers, currentPage, usersPerPage]);
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 3) {
+        pages.push(1, 2, 3, 4, "...", totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1, "...", totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+      } else {
+        pages.push(1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages);
+      }
+    }
+    return pages;
+  };
 
   /* ---------------- TIME AGO ---------------- */
   const timeAgo = (date) => {
@@ -473,7 +516,7 @@ function UserManagement() {
   }, [sortedUsers, selectedArchivedIds]);
 
   return (
-    <div className="container-fluid p-2">
+    <div className="container-fluid p-2 d-flex flex-column" style={{ height: "100%" }}>
       {/* PAGE HEADER */}
       <div
         className="d-flex justify-content-between mb-2 p-3 rounded flex-wrap"
@@ -501,13 +544,13 @@ function UserManagement() {
           {/* Advanced filters button */}
           <button
             ref={filterButtonRef}
-            className="btn d-inline-flex align-items-center"
+            className="btn d-inline-flex align-items-center position-relative"
             onClick={() => setUserFilterOpen((v) => !v)}
             title="Advanced filters"
             style={{
               border: userFilterOpen ? "2px solid #123458" : "1px solid #D4C9BE",
               background: activeUserFilterCount > 0 ? "#123458" : "#fff",
-              color: activeUserFilterCount > 0 ? "#F1EFEC" : "#030303",
+              color: activeUserFilterCount > 0 ? "#fff" : "#123458",
               height: "37px",
               padding: "0 10px",
               whiteSpace: "nowrap",
@@ -515,17 +558,37 @@ function UserManagement() {
             aria-expanded={userFilterOpen}
             aria-pressed={userFilterOpen}
           >
-            <CiFilter style={{ marginRight: 8 }} /> Filters{activeUserFilterCount > 0 ? ` (${activeUserFilterCount})` : ""}
+            <CiFilter size={20} />
+            <span className="d-none d-md-inline ms-1">Filters</span>
+            {activeUserFilterCount > 0 && (
+              <span
+                className="position-absolute badge rounded-pill"
+                style={{ 
+                  top: "-4px",
+                  right: "2px",
+                  background: "#F08080", 
+                  color: "#030303",
+                  fontSize: "0.65rem",
+                  border: "2px solid #fff",
+                  zIndex: 1,
+                  padding: "4px 6px",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
+                }}
+              >
+                {activeUserFilterCount}
+              </span>
+            )}
           </button>
 
           {/* Clear filters */}
           <button
-            className="form-control btn"
+            className="form-control btn d-flex align-items-center justify-content-center"
             onClick={handleClearAll}
             title="Clear filters/search"
-            style={{ height: "37px", width: "62px", border: "1px solid #D4C9BE" }}
+            style={{ height: "37px", width: "auto", minWidth: "42px", border: "1px solid #D4C9BE" }}
           >
-            Clear
+            <BsArrowCounterclockwise className="d-md-none" />
+            <span className="d-none d-md-inline">Clear</span>
           </button>
 
           {/* Search */}
@@ -553,7 +616,7 @@ function UserManagement() {
       </div>
 
       {/* TABLE CARD (responsive) */}
-      <div className="rounded" style={{ background: "#fff", border: "1px solid #D4C9BE" }}>
+      <div className="rounded d-flex flex-column flex-grow-1 shadow-sm" style={{ background: "#fff", border: "1px solid #D4C9BE", minHeight: 0, overflow: "hidden" }}>
         <div className="px-3 py-2 fw-semibold border-bottom d-flex justify-content-between align-items-center">
           <div>User Accounts Overview</div>
 
@@ -578,7 +641,7 @@ function UserManagement() {
           </div>
         </div>
 
-        <div className="d-flex flex-column flex-grow-1 p-2">
+        <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0 }}>
           {loading ? (
             <p className="text-center p-3">Loading users…</p>
           ) : (
@@ -595,10 +658,9 @@ function UserManagement() {
                     <col style={{ width: "8%" }} />   {/* Type */}
                     <col style={{ width: "8%" }} />   {/* Status */}
                     <col style={{ width: "20%" }} />  {/* Actions */}
-                  </colgroup>
-                  <thead>
+                  </colgroup>                   <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#FFF" }}>
                     <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
-                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
+                      <th style={{ background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}>
                         {userAdvancedFilters.archived ? (
                           <input
                             type="checkbox"
@@ -610,18 +672,18 @@ function UserManagement() {
                           "#"
                         )}
                       </th>
-                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Full Name</th>
-                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Login ID</th>
-                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Email</th>
+                      <th style={{ background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}>Full Name</th>
+                      <th style={{ background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}>Login ID</th>
+                      <th style={{ background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}>Email</th>
                       <th
                         onClick={() => toggleSort("date")}
-                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                        style={{ cursor: "pointer", background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}
                       >
                         {userAdvancedFilters.archived ? "Archived Date" : "Date"} {renderSortIcon("createdAt")}
                       </th>
                       <th
                         onClick={() => toggleSort("type")}
-                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                        style={{ cursor: "pointer", background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}
                       >
                         Type {renderSortIcon("type")}
                       </th>
@@ -629,239 +691,135 @@ function UserManagement() {
                       <th
                         className="text-center"
                         onClick={() => toggleSort("status")}
-                        style={{ cursor: "pointer", position: "sticky", top: 0, background: "#FFF" }}
+                        style={{ cursor: "pointer", background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}
                       >
                         Status {renderSortIcon("status")}
                       </th>
 
                       <th
                         className="text-center"
-                        style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                        style={{ background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}
                       >
                         Actions
                       </th>
                     </tr>
                   </thead>
+
                   <tbody>
-                    {sortedUsers.map((u, i) => (
-                      <tr key={u._id}>
-                        <td>
-                          {userAdvancedFilters.archived ? (
-                            <input
-                              type="checkbox"
-                              checked={selectedArchivedIds.includes(u._id)}
-                              onChange={() => toggleSelectArchived(u._id)}
-                              aria-label={`Select archived user ${u.firstname} ${u.lastname}`}
-                            />
-                          ) : (
-                            i + 1
-                          )}
-                        </td>
-
-                        {/* FULL NAME */}
-                        <td>
-                          {editingUserId === u._id ? (
-                            <div className="d-flex gap-1">
+                    {paginatedUsers.map((u, i) => {
+                      const creds = u.userCredentials || {};
+                      return (
+                        <tr key={u._id}>
+                          <td>
+                            {userAdvancedFilters.archived ? (
                               <input
-                                className="form-control form-control-sm"
-                                placeholder="First name"
-                                value={editedUser.firstname || ""}
-                                onChange={(e) =>
-                                  setEditedUser((prev) => ({
-                                    ...prev,
-                                    firstname: e.target.value,
-                                  }))
-                                }
+                                type="checkbox"
+                                checked={selectedArchivedIds.includes(u._id)}
+                                onChange={() => toggleSelectArchived(u._id)}
+                                aria-label={`Select archived user ${u.firstname} ${u.lastname}`}
                               />
-                              <input
-                                className="form-control form-control-sm"
-                                placeholder="Last name"
-                                value={editedUser.lastname || ""}
-                                onChange={(e) =>
-                                  setEditedUser((prev) => ({
-                                    ...prev,
-                                    lastname: e.target.value,
-                                  }))
-                                }
-                              />
-                            </div>
-                          ) : (
-                            `${u.firstname} ${u.lastname}`
-                          )}
-                        </td>
-
-                        {/* USERNAME */}
-                        <td>
-                          {editingUserId === u._id ? (
-                            <input
-                              className="form-control form-control-sm"
-                              value={editedUser.userCredentials?.username || ""}
-                              onChange={(e) =>
-                                handleCredChange("username", e.target.value)
-                              }
-                            />
-                          ) : (
-                            u.userCredentials?.username || ""
-                          )}
-                        </td>
-
-                        {/* EMAIL */}
-                        <td>
-                          {editingUserId === u._id ? (
-                            <input
-                              type="email"
-                              className="form-control form-control-sm"
-                              value={editedUser.userCredentials?.email || ""}
-                              onChange={(e) =>
-                                handleCredChange("email", e.target.value)
-                              }
-                            />
-                          ) : (
-                            u.userCredentials?.email || ""
-                          )}
-                        </td>
-
-                        {/* DATE */}
-                        <td>
-                          <small className="text-muted">
-                            {formatDate(
-                              userAdvancedFilters.archived && u.archivedAt
-                                ? u.archivedAt
-                                : u.createdAt || u.registeredAt || u.updatedAt
+                            ) : (
+                              i + 1 + (currentPage - 1) * usersPerPage
                             )}
-                          </small>
-                        </td>
+                          </td>
 
-                        {/* TYPE */}
-                        <td>
-                          {editingUserId === u._id && u.userCredentials?.type !== "admin" && u.userCredentials?.type !== "guard" ? (
-                            <select
-                              className="form-select form-select-sm"
-                              value={editedUser.userCredentials?.type || ""}
-                              onChange={(e) =>
-                                handleCredChange("type", e.target.value)
-                              }
-                            >
-                              <option value="student">student</option>
-                              <option value="faculty">faculty</option>
-                              <option value="visitor">visitor</option>
-                            </select>
-                          ) : (
+                          {/* FULL NAME */}
+                          <td>{u.firstname} {u.lastname}</td>
+
+                          {/* USERNAME */}
+                          <td>{creds.username || ""}</td>
+
+                          {/* EMAIL */}
+                          <td>{creds.email || ""}</td>
+
+                          {/* DATE */}
+                          <td>
+                            <small className="text-muted">
+                              {formatDate(
+                                userAdvancedFilters.archived && u.archivedAt
+                                  ? u.archivedAt
+                                  : u.createdAt || u.registeredAt || u.updatedAt
+                              )}
+                            </small>
+                          </td>
+
+                          {/* TYPE */}
+                          <td>
                             <span className="px-2 py-1 rounded small border">
-                              {u.userCredentials?.type === "student"
+                              {creds.type === "student"
                                 ? "Student"
-                                : u.userCredentials?.type === "faculty"
+                                : creds.type === "faculty"
                                 ? "Faculty"
-                                : u.userCredentials?.type === "guard"
+                                : creds.type === "guard"
                                 ? "Guard"
-                                : u.userCredentials?.type === "admin"
+                                : creds.type === "admin"
                                 ? "Admin"
                                 : "Visitor"}
                             </span>
-                          )}
-                        </td>
+                          </td>
 
-                        {/* STATUS */}
-                        <td className="text-center">
-                          {editingUserId === u._id ? (
-                            <select
-                              className="form-select form-select-sm"
-                              value={editedUser.userCredentials?.status || "Active"}
-                              onChange={(e) =>
-                                handleCredChange("status", e.target.value)
-                              }
-                            >
-                              <option value="Active">Active</option>
-                              <option value="Inactive">Inactive</option>
-                            </select>
-                          ) : (
+                          {/* STATUS */}
+                          <td className="text-center">
                             <span
                               className="px-2 py-1 rounded small"
                               style={{
                                 background:
-                                  u.userCredentials?.status === "Active"
-                                    ? "#90EE90"
-                                    : "#D4C9BE",
+                                  creds.status === "Active" ? "#90EE90" : "#D4C9BE",
                               }}
                             >
-                              {u.userCredentials?.status || ""}
+                              {creds.status || ""}
                             </span>
-                          )}
-                        </td>
+                          </td>
 
-                        {/* ACTIONS */}
-                        <td className="text-center">
-                          {userAdvancedFilters.archived ? (
-                            // Archived view: show Unarchive button for each row
-                            <div className="d-flex justify-content-center gap-2">
-                              <button
-                                className="btn btn-sm"
-                                style={{
-                                  border: "1px solid #123458",
-                                  color: "#123458",
-                                }}
-                                onClick={() => performUnarchive(u._id)}
-                              >
-                                Unarchive
-                              </button>
+                          {/* ACTIONS */}
+                          <td className="text-center">
+                            <div className="d-flex justify-content-center gap-1">
+                              {userAdvancedFilters.archived ? (
+                                <button
+                                  className="btn btn-sm"
+                                  style={{
+                                    border: "1px solid #123458",
+                                    color: "#123458",
+                                  }}
+                                  onClick={() => performUnarchive(u._id)}
+                                >
+                                  Unarchive
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ border: "1px solid #123458", color: "#123458" }}
+                                    onClick={() => handleEditClick(u)}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ border: "1px solid #F08080", color: "#F08080" }}
+                                    onClick={() => handleArchive(u._id)}
+                                    disabled={creds.type === "admin"}
+                                  >
+                                    Archive
+                                  </button>
+                                </>
+                              )}
                             </div>
-                          ) : editingUserId === u._id ? (
-                            <>
-                              <button
-                                className="btn btn-sm me-2"
-                                style={{
-                                  background: "#123458",
-                                  color: "#F1EFEC",
-                                }}
-                                onClick={handleSave}
-                              >
-                                Save
-                              </button>
-                              <button
-                                className="btn btn-sm border"
-                                onClick={() => setEditingUserId(null)}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                className="btn btn-sm me-2"
-                                style={{
-                                  border: "1px solid #123458",
-                                  color: "#123458",
-                                }}
-                                onClick={() => handleEditClick(u)}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                className="btn btn-sm"
-                                style={{
-                                  border: "1px solid #F08080",
-                                  color: "#F08080",
-                                }}
-                                onClick={() => handleArchive(u._id)}
-                                disabled={u.userCredentials?.type === "admin"}
-                              >
-                                Archive
-                              </button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               {/* Mobile list (below md): stacked cards */}
               <div className="d-block d-md-none">
-                {sortedUsers.length === 0 && <p className="text-center p-2">No users found.</p>}
-                {sortedUsers.map((u, idx) => {
+                {paginatedUsers.length === 0 && <p className="text-center p-2">No users found.</p>}
+                {paginatedUsers.map((u, idx) => {
                   const creds = u.userCredentials || {};
                   const isEditing = editingUserId === u._id;
+                  const actualIdx = idx + 1 + (currentPage - 1) * usersPerPage;
                   return (
                     <div key={u._id} className="card mb-2">
                       <div className="card-body p-2">
@@ -888,13 +846,14 @@ function UserManagement() {
                                   aria-label={`Select archived user ${u.firstname} ${u.lastname}`}
                                 />
                               ) : (
-                                <span className="text-muted">#{idx + 1}</span>
+                                <span className="text-muted">#{actualIdx}</span>
                               )}
                             </div>
                           </div>
                         </div>
 
-                        <div className="d-flex gap-2 flex-wrap align-items-center mt-2">
+                        <div className="d-flex gap-2 flex-nowrap align-items-center mt-2 justify-content-between">
+                          <div className="d-flex gap-1 align-items-center flex-shrink-1 overflow-hidden">
                           <span className="px-2 py-1 rounded small border">
                             {creds.type === "student"
                               ? "Student"
@@ -915,102 +874,41 @@ function UserManagement() {
                           >
                             {creds.status || ""}
                           </span>
+                        </div>
 
-                          <div className="ms-auto d-flex gap-1">
+                          <div className="d-flex gap-2 align-items-center position-relative flex-shrink-0">
                             {userAdvancedFilters.archived ? (
                               <button
-                                className="btn btn-sm"
-                                style={{
-                                  border: "1px solid #123458",
-                                  color: "#123458",
-                                }}
+                                className="btn btn-sm d-flex align-items-center justify-content-center p-2 rounded-2 shadow-sm"
+                                style={{ border: "1px solid #123458", color: "#123458", width: "32px", height: "32px" }}
                                 onClick={() => performUnarchive(u._id)}
+                                title="Unarchive"
                               >
-                                Unarchive
+                                <FaUndo size={14} />
                               </button>
-                            ) : isEditing ? (
-                              <>
-                                <button
-                                  className="btn btn-sm"
-                                  style={{ background: "#123458", color: "#fff" }}
-                                  onClick={handleSave}
-                                >
-                                  Save
-                                </button>
-                                <button className="btn btn-sm border" onClick={() => setEditingUserId(null)}>
-                                  Cancel
-                                </button>
-                              </>
                             ) : (
-                              <>
-                                <button
-                                  className="btn btn-sm"
-                                  style={{ border: "1px solid #123458", color: "#123458" }}
-                                  onClick={() => handleEditClick(u)}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  className="btn btn-sm"
-                                  style={{ border: "1px solid #F08080", color: "#F08080" }}
-                                  onClick={() => handleArchive(u._id)}
-                                  disabled={creds.type === "admin"}
-                                >
-                                  Archive
-                                </button>
-                              </>
+                                <>
+                                  <button
+                                    className="btn btn-sm d-flex align-items-center justify-content-center p-2 rounded-2 shadow-sm"
+                                    style={{ border: "1px solid #123458", color: "#123458", width: "32px", height: "32px" }}
+                                    onClick={() => handleEditClick(u)}
+                                    title="Edit User"
+                                  >
+                                    <FaEdit size={14} />
+                                  </button>
+                                  <button
+                                    className="btn btn-sm d-flex align-items-center justify-content-center p-2 rounded-2 shadow-sm"
+                                    style={{ border: "1px solid #F08080", color: "#F08080", width: "32px", height: "32px" }}
+                                    onClick={() => handleArchive(u._id)}
+                                    disabled={creds.type === "admin"}
+                                    title="Archive User"
+                                  >
+                                    <FaArchive size={14} />
+                                  </button>
+                                </>
                             )}
                           </div>
                         </div>
-
-                        {/* Inline edit fields on mobile */}
-                        {isEditing && (
-                          <div className="mt-2">
-                            <div className="mb-1">
-                              <input
-                                className="form-control form-control-sm"
-                                placeholder="First name"
-                                value={editedUser.firstname || ""}
-                                onChange={(e) =>
-                                  setEditedUser((prev) => ({
-                                    ...prev,
-                                    firstname: e.target.value,
-                                  }))
-                                }
-                              />
-                            </div>
-                            <div className="mb-1">
-                              <input
-                                className="form-control form-control-sm"
-                                placeholder="Last name"
-                                value={editedUser.lastname || ""}
-                                onChange={(e) =>
-                                  setEditedUser((prev) => ({
-                                    ...prev,
-                                    lastname: e.target.value,
-                                  }))
-                                }
-                              />
-                            </div>
-                            <div className="mb-1">
-                              <input
-                                className="form-control form-control-sm"
-                                value={editedUser.userCredentials?.username || ""}
-                                onChange={(e) => handleCredChange("username", e.target.value)}
-                                placeholder="Login ID"
-                              />
-                            </div>
-                            <div className="mb-1">
-                              <input
-                                className="form-control form-control-sm"
-                                value={editedUser.userCredentials?.email || ""}
-                                onChange={(e) => handleCredChange("email", e.target.value)}
-                                placeholder="Email"
-                                type="email"
-                              />
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -1020,9 +918,86 @@ function UserManagement() {
           )}
         </div>
 
-        <div className="px-3 py-2 small border-top text-muted">
-          Showing {filteredUsers.length} of {visibleUsers.length} users • Updated{" "}
-          {timeAgo(getLastUpdated())}
+        <div className="px-2 py-2 border-top d-flex flex-wrap justify-content-between align-items-center gap-2 bg-light mt-auto" style={{ borderRadius: "0 0 8px 8px" }}>
+          {/* Result Count & Rows Selector (Compact on Mobile) */}
+          <div className="d-flex align-items-center gap-2 flex-grow-1">
+            <div className="small fw-medium text-dark text-nowrap d-none d-sm-block" style={{ fontSize: "0.85rem" }}>
+              <span className="d-none d-sm-inline text-muted fw-normal">Found</span> {sortedUsers.length}{" "}
+              <span className="d-none d-sm-inline text-muted fw-normal">users.</span>{" "}
+              <span className="fw-bold">{sortedUsers.length === 0 ? 0 : (currentPage - 1) * usersPerPage + 1}-{Math.min(currentPage * usersPerPage, sortedUsers.length)}</span>
+              <span className="text-muted fw-normal ms-1">of {sortedUsers.length}</span>
+            </div>
+
+            <div className="d-flex align-items-center gap-1 ms-auto ms-sm-2">
+              <small className="text-muted d-none d-sm-inline" style={{ fontSize: "0.75rem" }}>Rows:</small>
+              <select
+                className="form-select form-select-sm py-0 px-1"
+                style={{ width: "55px", fontSize: "0.75rem", height: "24px", border: "1px solid #D4C9BE" }}
+                value={usersPerPage}
+                onChange={(e) => {
+                  setUsersPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                {[5, 10, 15, 20, 50].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="d-flex align-items-center gap-1">
+            <button
+              className="btn btn-sm py-1 px-2 border d-flex align-items-center gap-1 shadow-none"
+              style={{ fontSize: "0.8rem", background: "#fff", borderColor: "#D4C9BE", color: "#123458" }}
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+            >
+              Prev
+            </button>
+
+            <div className="d-none d-sm-flex gap-1 mx-1">
+              {getPageNumbers().map((num, idx) => (
+                <React.Fragment key={idx}>
+                  {num === "..." ? (
+                    <span className="text-muted px-1 small">...</span>
+                  ) : (
+                    <button
+                      className={`btn btn-sm py-0 px-2 shadow-none ${currentPage === num ? "btn-dark" : "btn-light border"}`}
+                      style={{ 
+                        fontSize: "0.75rem", 
+                        height: "24px", 
+                        minWidth: "24px",
+                        color: currentPage === num ? "#fff" : "#123458"
+                      }}
+                      onClick={() => typeof num === "number" && setCurrentPage(num)}
+                    >
+                      {num}
+                    </button>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* Mobile simplified page indicator */}
+            <div className="d-flex d-sm-none align-items-center px-2 small text-muted" style={{ fontSize: "0.75rem" }}>
+              Page {currentPage} of {totalPages || 1}
+            </div>
+
+            <button
+              className="btn btn-sm py-1 px-2 border d-flex align-items-center gap-1 shadow-none"
+              style={{ fontSize: "0.8rem", background: "#fff", borderColor: "#D4C9BE", color: "#123458" }}
+              disabled={currentPage === totalPages || totalPages === 0}
+              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        <div className="px-3 py-1 small border-top text-muted text-center" style={{ background: "#fdfdfd", fontSize: "0.7rem" }}>
+          Updated {timeAgo(getLastUpdated())}
         </div>
       </div>
 
@@ -1073,6 +1048,97 @@ function UserManagement() {
           }}
         >
           {toast.message}
+        </div>
+      )}      {/* Edit User Modal */}
+      {showEditModal && (
+        <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,.5)", zIndex: 1050 }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "15px" }}>
+              <div className="modal-header border-0 px-4 pt-4">
+                <h5 className="modal-title fw-bold" style={{ color: "#123458" }}>Edit User Profile</h5>
+                <button type="button" className="btn-close shadow-none" onClick={handleCloseEditModal}></button>
+              </div>
+              <div className="modal-body px-4">
+                <div className="row g-3 mb-3">
+                  <div className="col-6">
+                    <label className="form-label small fw-bold text-muted text-uppercase">First Name</label>
+                    <input
+                      className="form-control rounded-3"
+                      placeholder="First name"
+                      value={editedUser.firstname || ""}
+                      onChange={(e) => setEditedUser(prev => ({ ...prev, firstname: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label small fw-bold text-muted text-uppercase">Last Name</label>
+                    <input
+                      className="form-control rounded-3"
+                      placeholder="Last name"
+                      value={editedUser.lastname || ""}
+                      onChange={(e) => setEditedUser(prev => ({ ...prev, lastname: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-muted text-uppercase">Username (Login ID)</label>
+                  <input
+                    className="form-control rounded-3"
+                    value={editedUser.userCredentials?.username || ""}
+                    onChange={(e) => handleCredChange("username", e.target.value)}
+                  />
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-muted text-uppercase">Email Address</label>
+                  <input
+                    className="form-control rounded-3"
+                    type="email"
+                    value={editedUser.userCredentials?.email || ""}
+                    onChange={(e) => handleCredChange("email", e.target.value)}
+                  />
+                </div>
+
+                <div className="row g-3 mb-3">
+                  <div className="col-6">
+                    <label className="form-label small fw-bold text-muted text-uppercase">Account Type</label>
+                    <select
+                      className="form-select rounded-3"
+                      disabled={editedUser.userCredentials?.type === "admin" || editedUser.userCredentials?.type === "guard"}
+                      value={editedUser.userCredentials?.type || ""}
+                      onChange={(e) => handleCredChange("type", e.target.value)}
+                    >
+                      <option value="student">Student</option>
+                      <option value="faculty">Faculty</option>
+                      <option value="visitor">Visitor</option>
+                      {(editedUser.userCredentials?.type === "admin" || editedUser.userCredentials?.type === "guard") && (
+                        <option value={editedUser.userCredentials.type}>{editedUser.userCredentials.type}</option>
+                      )}
+                    </select>
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label small fw-bold text-muted text-uppercase">Status</label>
+                    <select
+                      className="form-select rounded-3"
+                      value={editedUser.userCredentials?.status || "Active"}
+                      onChange={(e) => handleCredChange("status", e.target.value)}
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer border-0 px-4 pb-4">
+                <button className="btn btn-light px-4 flex-grow-1 fw-bold" onClick={handleCloseEditModal} style={{ borderRadius: "10px" }}>
+                  Cancel
+                </button>
+                <button className="btn px-4 flex-grow-1 fw-bold text-white" onClick={handleSave} style={{ backgroundColor: "#123458", borderRadius: "10px" }}>
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
-
+# conda activate yolo-env1
+# cd desktop/wtsystem/python
 # uvicorn yolo_service:app --host 0.0.0.0 --port 5000 --reload
 
 fastapi

@@ -1,4 +1,5 @@
 const User = require("../models/userModel");
+const bcrypt = require("bcryptjs");
 
 // ✅ GET /api/users?archived=true
 const getUsers = async (req, res) => {
@@ -13,6 +14,60 @@ const getUsers = async (req, res) => {
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch users" });
+  }
+};
+
+// ✅ POST /api/users
+const createUser = async (req, res) => {
+  const { firstname, lastname, username, email, password, type, institute, program } = req.body;
+
+  if (!firstname || !lastname || !username || !email || !password || !type) {
+    return res.status(400).json({ error: "All required fields must be provided" });
+  }
+
+  const usernameRegex = /^[a-zA-Z0-9_]{5,}$/;
+  if (!usernameRegex.test(username)) {
+    return res.status(400).json({ error: "Username must be at least 5 characters and alphanumeric" });
+  }
+
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({ error: "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character." });
+  }
+
+  try {
+    const existingUser = await User.findOne({ 
+      $or: [
+        { "userCredentials.username": username },
+        { "userCredentials.email": email }
+      ]
+    });
+    
+    if (existingUser) {
+      return res.status(400).json({ error: "Username or Email already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new User({
+      firstname,
+      lastname,
+      userCredentials: {
+        institute: institute || "N/A",
+        program: program || "N/A",
+        username,
+        email,
+        password: hashedPassword,
+        type: type.toLowerCase(),
+        status: "Active"
+      }
+    });
+
+    await newUser.save();
+    res.status(201).json({ message: "Account created successfully", user: newUser });
+  } catch (error) {
+    console.error("Create user error:", error);
+    res.status(500).json({ error: "Failed to create user" });
   }
 };
 
@@ -115,6 +170,7 @@ const deleteUser = async (req, res) => {
 module.exports = {
   getUsers,
   getUserById,
+  createUser,
   updateUser,
   archiveUser,
   unarchiveUser,

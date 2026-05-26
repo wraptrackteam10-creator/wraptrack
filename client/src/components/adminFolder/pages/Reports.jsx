@@ -17,12 +17,26 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
+import { 
+  FaBoxOpen, 
+  FaCheckCircle, 
+  FaExclamationTriangle, 
+  FaUsers, 
+  FaUserCheck, 
+  FaClock, 
+  FaCalendarAlt,
+  FaFilePdf,
+  FaChartLine,
+  FaChartPie,
+  FaChartBar,
+} from "react-icons/fa";
 import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
 function Reports() {
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [isMobile, setIsMobile] = useState(
     typeof window !== "undefined" ? window.innerWidth < 768 : false
   );
@@ -90,9 +104,12 @@ function Reports() {
 
   if (loading)
     return (
-      <p className="text-center mt-4" style={{ color: "#D4C9BE" }}>
-        Loading reports...
-      </p>
+      <div className="d-flex flex-column align-items-center justify-content-center" style={{ minHeight: "80vh" }}>
+        <div className="spinner-border" style={{ color: "#123458" }} role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+        <p className="mt-3 fw-medium text-muted">Analyzing system reports...</p>
+      </div>
     );
 
   // --- SUMMARY METRICS using timestamps ---
@@ -129,6 +146,8 @@ function Reports() {
     avgClaimTime: avgClaimHours,
   };
 
+  const years = [2024, 2025, 2026]; // Available years for filtering
+
   // Pie chart
   const pieData = [
     { name: "Claimed", value: claimedCount },
@@ -138,14 +157,14 @@ function Reports() {
   const COLORS = ["#90EE90", "#F08080", "#FFA500"]; // Added color for penalized
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const currentYear = new Date().getFullYear();
+  // We use selectedYear instead of a hardcoded currentYear
 
   // --- Monthly Line Chart ---
   const monthlyDataLine = monthNames.map((month, i) => {
     const monthItems = items.filter(
       (it) =>
         it.action === "Deposited" &&
-        new Date(it.createdAt).getFullYear() === currentYear &&
+        new Date(it.createdAt).getFullYear() === selectedYear &&
         new Date(it.createdAt).getMonth() === i
     );
     const classCounts = {};
@@ -184,19 +203,19 @@ function Reports() {
 
         if (it.depositedAt) {
           const d = new Date(it.depositedAt);
-          if (d.getFullYear() === currentYear && d.getMonth() === i) {
+          if (d.getFullYear() === selectedYear && d.getMonth() === i) {
             depositedMap[cls] += qty;
           }
         }
         if (it.claimedAt) {
           const d = new Date(it.claimedAt);
-          if (d.getFullYear() === currentYear && d.getMonth() === i) {
+          if (d.getFullYear() === selectedYear && d.getMonth() === i) {
             claimedMap[cls] += qty;
           }
         }
         if (it.unclaimedAt) {
           const d = new Date(it.unclaimedAt);
-          if (d.getFullYear() === currentYear && d.getMonth() === i) {
+          if (d.getFullYear() === selectedYear && d.getMonth() === i) {
             unclaimedMap[cls] += qty;
           }
         }
@@ -217,7 +236,7 @@ function Reports() {
 
   // --- Weekly Bar Chart (FIXED) ---
   const weeklyDataBar = [];
-  const startOfYear = new Date(currentYear, 0, 1);
+  const startOfYear = new Date(selectedYear, 0, 1);
   for (let w = 0; w < 52; w++) {
     const startWeek = new Date(startOfYear);
     startWeek.setDate(startWeek.getDate() + w * 7);
@@ -233,15 +252,15 @@ function Reports() {
     items.forEach((it) => {
       if (it.depositedAt) {
         const d = new Date(it.depositedAt);
-        if (d.getFullYear() === currentYear && d >= startWeek && d <= endWeek) deposited += 1;
+        if (d.getFullYear() === selectedYear && d >= startWeek && d <= endWeek) deposited += 1;
       }
       if (it.claimedAt) {
         const d = new Date(it.claimedAt);
-        if (d.getFullYear() === currentYear && d >= startWeek && d <= endWeek) claimed += 1;
+        if (d.getFullYear() === selectedYear && d >= startWeek && d <= endWeek) claimed += 1;
       }
       if (it.unclaimedAt) {
         const d = new Date(it.unclaimedAt);
-        if (d.getFullYear() === currentYear && d >= startWeek && d <= endWeek) unclaimed += 1;
+        if (d.getFullYear() === selectedYear && d >= startWeek && d <= endWeek) unclaimed += 1;
       }
     });
 
@@ -269,6 +288,7 @@ function Reports() {
     classNames.forEach((c) => (totalDeposits[c] = 0));
     items.forEach((it) => {
       if (!it.description || !it.depositedAt) return;
+      if (new Date(it.depositedAt).getFullYear() !== selectedYear) return;
       classNames.forEach((cls) => {
         const escaped = escapeRegExp(cls);
         const regex = new RegExp(`${escaped}s?\\s*\\(\\s*(?:x\\s*)?(\\d+)(?:\\s*x)?\\s*\\)`, "i");
@@ -277,9 +297,9 @@ function Reports() {
       });
     });
     const sorted = Object.entries(totalDeposits).sort((a, b) => b[1] - a[1]);
-    if (sorted.length === 0) return "No deposited items found this year.";
+    if (sorted.length === 0) return `No deposited items found for ${selectedYear}.`;
     const topItems = sorted.slice(0, 2).map((item) => item[0]);
-    return `${topItems.join(" and ")} are the top deposited items this year, indicating these categories are most commonly lost or left behind.`;
+    return `${topItems.join(" and ")} are the top deposited items in ${selectedYear}, indicating these categories are most commonly lost or left behind.`;
   };
 
   const weeklyBarInterpreter = () => {
@@ -300,7 +320,7 @@ function Reports() {
     const totalPerClass = {};
     classNames.forEach((c) => (totalPerClass[c] = 0));
     items
-      .filter((it) => it.depositedAt)
+      .filter((it) => it.depositedAt && new Date(it.depositedAt).getFullYear() === selectedYear)
       .forEach((it) => {
         if (!it.description) return;
         classNames.forEach((cls) => {
@@ -311,8 +331,8 @@ function Reports() {
         });
       });
     const topClass = Object.entries(totalPerClass).sort((a, b) => b[1] - a[1])[0];
-    if (!topClass || topClass[1] === 0) return "No deposits recorded for any class this year.";
-    return `${topClass[0]} had the highest deposits this year, showing a clear trend in user activity — this may help prioritize inventory, signage, or education for that item type.`;
+    if (!topClass || topClass[1] === 0) return `No deposits recorded for any class in ${selectedYear}.`;
+    return `${topClass[0]} had the highest deposits in ${selectedYear}, showing a clear trend in user activity — this may help prioritize inventory, signage, or education for that item type.`;
   };
 
   // --- PDF Generation (includes narrative report) ---
@@ -326,7 +346,7 @@ function Reports() {
 
     // Add header with report title and timestamp
     pdf.setFontSize(16);
-    pdf.text(`Item Report — ${currentYear}`, margin, y);
+    pdf.text(`Item Report — ${selectedYear}`, margin, y);
     pdf.setFontSize(9);
     const nowLabel = new Date().toLocaleString();
     pdf.text(`Generated: ${nowLabel}`, margin, y + 6);
@@ -335,17 +355,41 @@ function Reports() {
     // Render chart area as image if available
     if (chartRef.current) {
       try {
-        const canvas = await html2canvas(chartRef.current, { scale: 2 });
+        const element = chartRef.current;
+        const canvas = await html2canvas(element, { 
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          scrollY: -window.scrollY,
+          windowWidth: 1200, // Ensure wide layout for capture
+          windowHeight: element.scrollHeight
+        });
         const imgData = canvas.toDataURL("image/png");
         const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = usableWidth;
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        if (y + pdfHeight > pageHeight - 30) {
+        let pdfWidth = usableWidth;
+        let pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        // Center the image horizontally
+        const xOffset = margin + (usableWidth - pdfWidth) / 2;
+        
+        let heightLeft = pdfHeight;
+        let position = y;
+        let shift = 0;
+
+        pdf.addImage(imgData, "PNG", xOffset, position, pdfWidth, pdfHeight);
+        let drawn = pageHeight - position;
+        heightLeft -= drawn;
+
+        while (heightLeft > 0) {
           pdf.addPage();
-          y = margin;
+          shift += drawn;
+          position = margin;
+          pdf.addImage(imgData, "PNG", xOffset, position - shift, pdfWidth, pdfHeight);
+          drawn = pageHeight - position;
+          heightLeft -= drawn;
         }
-        pdf.addImage(imgData, "PNG", margin, y, pdfWidth, pdfHeight);
-        y += pdfHeight + 8;
+
+        y = position - shift + pdfHeight + 8;
       } catch (err) {
         // ignore chart capture errors but continue
         console.warn("Failed to render charts to image:", err);
@@ -356,7 +400,7 @@ function Reports() {
     const narratives = [
       {
         title: "Executive Summary",
-        text: `This report summarizes item deposit and claim activity for ${currentYear}. In total there are ${summary.totalDeposited} deposited records and ${summary.totalClaimed} successful claims. ${summary.unclaimed} items remain unclaimed and ${summary.penalized} items received penalties. The system has ${summary.totalUsers} users (${summary.activeUsers} active). Average time to claim an item is ${summary.avgClaimTime} hours.`,
+        text: `This report summarizes item deposit and claim activity for ${selectedYear}. In total there are ${summary.totalDeposited} deposited records and ${summary.totalClaimed} successful claims. ${summary.unclaimed} items remain unclaimed and ${summary.penalized} items received penalties. The system has ${summary.totalUsers} users (${summary.activeUsers} active). Average time to claim an item is ${summary.avgClaimTime} hours.`,
       },
       { title: "Claimed vs Unclaimed", text: pieInterpreter() },
       { title: "Monthly Top Items", text: monthlyBarInterpreter() },
@@ -434,7 +478,7 @@ function Reports() {
       },
     });
 
-    pdf.save(`Item_Report_${currentYear}.pdf`);
+    pdf.save(`Item_Report_${selectedYear}.pdf`);
   };
 
   // Chart heights adjusted to screen size for improved mobile UX
@@ -445,183 +489,251 @@ function Reports() {
   const monthTickAngle = isMobile ? -30 : 0;
 
   return (
-    <div className="container-fluid p-2" style={{ background: "#FFF", minHeight: "100vh" }}>
+    <div className="container-fluid p-3 p-md-4" style={{ background: "#f8fafc", minHeight: "100vh" }}>
+      <style>
+        {`
+          @media print {
+            .no-print, .sidebar, .navbar, .btn {
+              display: none !important;
+            }
+            .container-fluid {
+              background: white !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            .card {
+              border: 1px solid #eee !important;
+              box-shadow: none !important;
+              break-inside: avoid;
+            }
+            body {
+              background: white !important;
+            }
+          }
+        `}
+      </style>
       {/* PAGE HEADER */}
       <div
-        className="d-flex justify-content-between mb-2 p-3 rounded flex-wrap align-items-center"
-        style={{ background: "#FFF", border: "1px solid #D4C9BE" }}
+        className="d-flex justify-content-between mb-4 p-4 rounded-4 shadow-sm align-items-center flex-wrap gap-3 no-print"
+        style={{ background: "#FFF", border: "1px solid #e2e8f0" }}
       >
-        <div>
-          <h4 className="fw-semibold mb-1">Reports & Analytics</h4>
-          <small style={{ color: "#6b6b6b" }}>View and analyze deposited item activity</small>
+        <div className="d-flex align-items-center gap-3">
+          <div className="p-3 rounded-3" style={{ background: "rgba(18, 52, 88, 0.1)", color: "#123458" }}>
+            <FaChartLine size={24} />
+          </div>
+          <div>
+            <h4 className="fw-bold mb-0 text-dark">System Analytics</h4>
+            <p className="text-muted small mb-0">Detailed insights for {selectedYear} item activity</p>
+          </div>
         </div>
-        <button
-          className="btn mt-2"
-          style={{ background: "#123458", color: "#F1EFEC", border: "1px solid #F1EFEC", height: "40px" }}
-          onClick={generatePDF}
-        >
-          📝 Generate PDF
-        </button>
+        
+        <div className="d-flex gap-2 flex-wrap align-items-center">
+          <div className="input-group input-group-sm" style={{ width: "auto" }}>
+            <span className="input-group-text bg-light border-end-0"><FaCalendarAlt className="text-muted" /></span>
+            <select 
+              className="form-select bg-light border-start-0 ps-0 fw-semibold" 
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              style={{ width: "100px" }}
+            >
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        
+          <button
+            className="btn d-flex align-items-center gap-2 px-3 fw-semibold shadow-sm no-print"
+            style={{ background: "#123458", color: "#fff", border: "none", borderRadius: "10px", height: "40px" }}
+            onClick={generatePDF}
+          >
+            <FaFilePdf /> Export PDF
+          </button>
+        </div>
       </div>
 
-      <div ref={chartRef} style={{ paddingBottom: 12 }}>
+      <div ref={chartRef} style={{ paddingBottom: 20 }}>
         {/* SUMMARY CARDS */}
-        <div className="row g-2 mb-2">
+        <div className="row g-3 mb-4">
           {[
-            { title: "Deposited Items", value: summary.totalDeposited, color: "#123458" },
-            { title: "Claimed Items", value: summary.totalClaimed, color: "#90EE90" },
-            { title: "Unclaimed Items", value: summary.unclaimed, color: "#F08080" },
-            { title: "Total Users", value: summary.totalUsers, color: "#123458" },
-            { title: "Active Users", value: summary.activeUsers, color: "#90EE90" },
-            { title: "Average Claim Time (hrs)", value: summary.avgClaimTime, color: "#123458" },
+            { title: "Deposited Items", value: summary.totalDeposited, color: "#123458", icon: <FaBoxOpen />, bg: "rgba(18, 52, 88, 0.1)" },
+            { title: "Claimed Items", value: summary.totalClaimed, color: "#10b981", icon: <FaCheckCircle />, bg: "rgba(16, 185, 129, 0.1)" },
+            { title: "Unclaimed Items", value: summary.unclaimed, color: "#ef4444", icon: <FaExclamationTriangle />, bg: "rgba(239, 68, 68, 0.1)" },
+            { title: "Total Users", value: summary.totalUsers, color: "#123458", icon: <FaUsers />, bg: "rgba(18, 52, 88, 0.1)" },
+            { title: "Active Users", value: summary.activeUsers, color: "#10b981", icon: <FaUserCheck />, bg: "rgba(16, 185, 129, 0.1)" },
+            { title: "Avg. Claim Time", value: `${summary.avgClaimTime}h`, color: "#3b82f6", icon: <FaClock />, bg: "rgba(59, 130, 246, 0.1)" },
           ].map((item, idx) => (
-            <div key={idx} className="col-6 col-sm-4 col-md-3 col-lg-2">
+            <div key={idx} className="col-12 col-sm-6 col-md-4 col-lg-2">
               <div
-                className="card shadow-sm rounded h-100 text-center"
-                style={{ minHeight: "100px", border: "1px solid #D4C9BE" }}
+                className="card border-0 shadow-sm rounded-4 h-100 p-2 transition-hover"
+                style={{ background: "#fff" }}
               >
-                <div className="card-body d-flex flex-column justify-content-center">
-                  <h6 className="text-secondary fw-semibold mb-1">{item.title}</h6>
-                  <h5 className="fw-bold" style={{ color: item.color }}>
-                    {item.value}
-                  </h5>
+                <div className="card-body d-flex align-items-center gap-3 p-2">
+                  <div className="p-3 rounded-3 d-flex align-items-center justify-content-center" style={{ background: item.bg, color: item.color, width: "48px", height: "48px" }}>
+                    {item.icon}
+                  </div>
+                  <div>
+                    <p className="text-muted small fw-bold text-uppercase mb-0" style={{ fontSize: "0.65rem", letterSpacing: "0.5px" }}>{item.title}</p>
+                    <h5 className="fw-bold mb-0" style={{ color: "#334155" }}>
+                      {item.value}
+                    </h5>
+                  </div>
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* CHARTS */}
-        <div className="row g-3 mb-3">
-          <div className="col-lg-6 col-12">
-            <div
-              className="card p-3 shadow-sm rounded h-100"
-              style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}
-            >
-              <h6 className="fw-semibold mb-3 text-center text-secondary">Top Items per Month</h6>
-              <ResponsiveContainer width="100%" height={smallChartHeight}>
-                <BarChart data={monthlyDataBar} margin={{ left: 10, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" angle={monthTickAngle} textAnchor={isMobile ? "end" : "middle"} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="depositedValue" fill="#123458" name="Deposited" />
-                  <Bar dataKey="claimedValue" fill="#90EE90" name="Claimed" />
-                  <Bar dataKey="unclaimedValue" fill="#F08080" name="Unclaimed" />
+        {/* CHARTS SECTION 1 */}
+        <div className="row g-4 mb-4">
+          <div className="col-lg-7">
+            <div className="card border-0 shadow-sm rounded-4 p-4 h-100" style={{ background: "#fff" }}>
+              <div className="d-flex justify-content-between align-items-center mb-4">
+                <h6 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                  <FaChartBar className="text-primary" /> Monthly Activity Overview
+                </h6>
+              </div>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={monthlyDataBar} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                    cursor={{ fill: '#f8fafc' }}
+                  />
+                  <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px' }} />
+                  <Bar dataKey="depositedValue" fill="#123458" name="Deposited" radius={[4, 4, 0, 0]} barSize={isMobile ? 10 : 20} />
+                  <Bar dataKey="claimedValue" fill="#10b981" name="Claimed" radius={[4, 4, 0, 0]} barSize={isMobile ? 10 : 20} />
+                  <Bar dataKey="unclaimedValue" fill="#ef4444" name="Unclaimed" radius={[4, 4, 0, 0]} barSize={isMobile ? 10 : 20} />
                 </BarChart>
               </ResponsiveContainer>
-              <p className="mt-2 text-center text-secondary">{monthlyBarInterpreter()}</p>
+              <div className="mt-4 p-3 rounded-3 bg-light border-start border-4 border-primary">
+                <p className="small text-muted mb-0"><span className="fw-bold text-dark">Insight:</span> {monthlyBarInterpreter()}</p>
+              </div>
             </div>
           </div>
 
-          <div className="col-lg-6 col-12">
-            <div
-              className="card p-3 shadow-sm rounded h-100"
-              style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}
-            >
-              <h6 className="fw-semibold mb-3 text-center text-secondary">Claimed vs Unclaimed vs Penalized</h6>
-              <ResponsiveContainer width="100%" height={smallChartHeight}>
+          <div className="col-lg-5">
+            <div className="card border-0 shadow-sm rounded-4 p-4 h-100" style={{ background: "#fff" }}>
+              <h6 className="fw-bold text-dark mb-4 d-flex align-items-center gap-2">
+                <FaChartPie className="text-warning" /> Status Distribution
+              </h6>
+              <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" outerRadius={isMobile ? 70 : 80} label dataKey="value">
+                  <Pie 
+                    data={pieData} 
+                    cx="50%" 
+                    cy="50%" 
+                    innerRadius={isMobile ? 60 : 80}
+                    outerRadius={isMobile ? 80 : 100}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
                     {pieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
-                  <Legend layout="horizontal" verticalAlign={isMobile ? "bottom" : "bottom"} align="center" />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                  <Legend verticalAlign="bottom" iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
-              <p className="mt-2 text-center text-secondary">{pieInterpreter()}</p>
+              <div className="mt-4 p-3 rounded-3 bg-light border-start border-4 border-warning">
+                <p className="small text-muted mb-0"><span className="fw-bold text-dark">Insight:</span> {pieInterpreter()}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* WEEKLY & LINE CHARTS */}
-        <div className="row g-3 mb-3">
+        {/* WEEKLY TRENDS */}
+        <div className="row g-4 mb-4">
           <div className="col-12">
-            <div className="card p-3 shadow-sm rounded" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
-              <h6 className="fw-semibold mb-3 text-center text-secondary">Weekly Deposited/Claimed/Unclaimed</h6>
-              <ResponsiveContainer width="100%" height={mediumChartHeight}>
-                <BarChart data={weeklyDataBar} margin={{ left: 10, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" interval={weeklyTickInterval} angle={isMobile ? -45 : 0} textAnchor={isMobile ? "end" : "middle"} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="deposited" fill="#123458" name="Deposited" />
-                  <Bar dataKey="claimed" fill="#90EE90" name="Claimed" />
-                  <Bar dataKey="unclaimed" fill="#F08080" name="Unclaimed" />
+            <div className="card border-0 shadow-sm rounded-4 p-4" style={{ background: "#fff" }}>
+              <h6 className="fw-bold text-dark mb-4 d-flex align-items-center gap-2">
+                <FaChartBar className="text-info" /> Weekly Performance Tracking
+              </h6>
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={weeklyDataBar}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="week" interval={weeklyTickInterval} axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                  <Legend verticalAlign="top" align="right" />
+                  <Bar dataKey="deposited" fill="#1e293b" name="Deposited" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="claimed" fill="#10b981" name="Claimed" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="unclaimed" fill="#ef4444" name="Unclaimed" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-              <p className="mt-2 text-center text-secondary">{weeklyBarInterpreter()}</p>
+              <div className="mt-4 p-3 rounded-3 bg-light border-start border-4 border-info">
+                <p className="small text-muted mb-0"><span className="fw-bold text-dark">Insight:</span> {weeklyBarInterpreter()}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* LINE CHART */}
-        <div className="row g-3">
+        {/* CATEGORY TRENDS */}
+        <div className="row g-4">
           <div className="col-12">
-            <div className="card p-3 shadow-sm rounded" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
-              <h6 className="fw-semibold mb-3 text-center text-secondary">Monthly Item Deposit Trend</h6>
-              <ResponsiveContainer width="100%" height={lineChartHeight}>
-                <LineChart data={monthlyDataLine} margin={{ left: 10, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend layout="horizontal" verticalAlign="bottom" align="center" />
+            <div className="card border-0 shadow-sm rounded-4 p-4" style={{ background: "#fff" }}>
+              <h6 className="fw-bold text-dark mb-4 d-flex align-items-center gap-2">
+                <FaChartLine className="text-danger" /> Category Wise Deposit Trends
+              </h6>
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={monthlyDataLine}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                  <Legend verticalAlign="top" iconType="line" />
                   {classNames.map((className, idx) => (
                     <Line
                       key={idx}
                       type="monotone"
                       dataKey={className}
                       stroke={lineColors[idx]}
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: lineColors[idx], strokeWidth: 2, stroke: '#fff' }}
+                      activeDot={{ r: 6, strokeWidth: 0 }}
                       name={className}
-                      dot={false}
-                      activeDot={{ r: 5 }}
                     />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
-              <p className="mt-2 text-center text-secondary">{lineChartInterpreter()}</p>
+              <div className="mt-4 p-3 rounded-3 bg-light border-start border-4 border-danger">
+                <p className="small text-muted mb-0"><span className="fw-bold text-dark">Insight:</span> {lineChartInterpreter()}</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* SUMMARY TABLE */}
-      <div className="row g-3 mb-3">
+      <div className="row g-4 mb-4">
         <div className="col-12">
-          <div className="card p-3 shadow-sm rounded" style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}>
-            <h6 className="fw-semibold mb-3 text-center text-secondary">📊 Summary & Insights</h6>
+          <div className="card border-0 shadow-sm rounded-4 p-4" style={{ background: "#fff" }}>
+            <h6 className="fw-bold text-dark mb-4 d-flex align-items-center gap-2">
+              📊 Data Matrix & Summary
+            </h6>
             <div className="table-responsive">
-              <table className="table table-bordered table-hover">
-                <thead style={{ background: "#FFFFFF", borderBottom: "1px solid #D4C9BE" }}>
-                  <tr style={{ color: "#D4C9BE" }}>
-                    <th>Metric / Chart</th>
-                    <th>Description</th>
-                    <th>Current Value / Insight</th>
+              <table className="table table-hover align-middle border-light">
+                <thead className="bg-light">
+                  <tr className="text-muted small text-uppercase fw-bold">
+                    <th className="py-3 border-0">Metric / Chart</th>
+                    <th className="py-3 border-0">Description</th>
+                    <th className="py-3 border-0">Insight / Value</th>
                   </tr>
                 </thead>
-                <tbody style={{ color: "#030303" }}>
+                <tbody className="border-0">
                   {[
-                    { metric: "Total Deposited Logs", description: "Number of items deposited in the system.", value: summary.totalDeposited },
-                    { metric: "Total Claimed Logs", description: "Number of deposited items that were claimed.", value: summary.totalClaimed },
-                    { metric: "Unclaimed Logs", description: "Deposited items that have not been claimed yet.", value: summary.unclaimed },
-                    { metric: "Penalized Items", description: "Deposited items with penalties applied.", value: summary.penalized },
-                    { metric: "Total Users", description: "All users excluding admin and guards.", value: summary.totalUsers },
-                    { metric: "Active Users", description: "Users who are currently active in the system.", value: summary.activeUsers },
-                    { metric: "Average Claim Time (hrs)", description: "Average time between depositing and claiming an item.", value: summary.avgClaimTime },
-                    { metric: "Claimed vs Unclaimed Pie Chart", description: "Shows proportion of claimed, unclaimed, and penalized items.", value: pieInterpreter() },
-                    { metric: "Monthly Top Items Bar Chart", description: "Shows which items are most deposited, claimed, or unclaimed each month.", value: monthlyBarInterpreter() },
-                    { metric: "Weekly Deposited/Claimed/Unclaimed Chart", description: "Shows weekly activity trends across the year.", value: weeklyBarInterpreter() },
-                    { metric: "Monthly Deposited Trend Line Chart", description: "Displays trends of item deposits per class each month.", value: lineChartInterpreter() },
+                    { metric: "Total Deposited Logs", description: "All items logged in the system.", value: summary.totalDeposited },
+                    { metric: "Total Claimed Logs", description: "Successfully reunited with owners.", value: summary.totalClaimed },
+                    { metric: "Unclaimed Logs", description: "Items still waiting for collection.", value: summary.unclaimed },
+                    { metric: "Penalized Items", description: "Items that exceeded claim duration.", value: summary.penalized },
+                    { metric: "Active Users", description: "Current active system participants.", value: summary.activeUsers },
+                    { metric: "Average Claim Time", description: "Efficiency of recovery process.", value: `${summary.avgClaimTime} Hours` },
                   ].map((item, idx) => (
                     <tr key={idx}>
-                      <td style={{ verticalAlign: "top", width: "20%" }}>{item.metric}</td>
-                      <td style={{ verticalAlign: "top", width: "40%" }}>{item.description}</td>
-                      <td style={{ verticalAlign: "top", width: "40%" }}>{typeof item.value === "number" ? item.value : item.value}</td>
+                      <td className="fw-semibold text-dark py-3">{item.metric}</td>
+                      <td className="text-muted small">{item.description}</td>
+                      <td className="fw-bold text-primary">{item.value}</td>
                     </tr>
                   ))}
                 </tbody>
