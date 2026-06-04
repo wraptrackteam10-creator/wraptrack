@@ -20,6 +20,7 @@ function Signup() {
   const [program, setProgram] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [showPassword, setShowPassword] = useState(false); // toggles both password fields
+  const [agreedToTerms, setAgreedToTerms] = useState(false); // New state for terms checkbox
 
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -121,6 +122,12 @@ function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitted(true);
+
+    // Check terms acceptance
+    if (!agreedToTerms) {
+      showToastMessage("❌ You must agree to the Terms of Service and Privacy Policy.");
+      return;
+    }
 
     // Only enforce student username format for Students; faculty can have any username
     if ((role === "Student" && !isValidUsername(username))
@@ -264,6 +271,7 @@ function Signup() {
         setRole("Student");
         setInstitute("");
         setProgram("");
+        setAgreedToTerms(false);
         setOtp(["", "", "", "", "", ""]);
         setIsOtpSent(false);
         setSubmitted(false);
@@ -336,7 +344,7 @@ function Signup() {
         padding: "20px",
       }}
     >
-      <div className="card signup-card shadow-lg border-0 p-4 rounded-3" style={{ width: "100%", maxWidth: "640px", margin: "0 auto", marginTop: "50px" }}>
+      <div className="card signup-card shadow-lg border-0 p-4 rounded-3" style={{ width: "100%", maxWidth: "640px", margin: "0 auto", marginTop: "50px", marginBottom: "50px" }}>
         <form onSubmit={handleSubmit}>
           <div className="mb-4 text-center">
             <img src={logo} alt="logo" style={{ width: "100px" }} />
@@ -510,6 +518,35 @@ function Signup() {
             </div>
           </div>
 
+          {/* Terms and Privacy Checkbox */}
+          <div className="mb-4 mt-4" style={{ backgroundColor: "#F9F8F6", padding: "16px", borderRadius: "8px", border: "1px solid #E7E2DD" }}>
+            <div className="form-check">
+              <input
+                type="checkbox"
+                className="form-check-input"
+                id="termsCheckbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                style={{ cursor: "pointer", width: "18px", height: "18px", marginTop: "3px" }}
+              />
+              <label className="form-check-label" htmlFor="termsCheckbox" style={{ cursor: "pointer", marginLeft: "8px", color: "#030303", fontSize: "14px" }}>
+                I agree to the{" "}
+                <a href="/info/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#123458", textDecoration: "none", fontWeight: 600 }}>
+                  Terms of Service
+                </a>
+                {" "}and{" "}
+                <a href="/info/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#123458", textDecoration: "none", fontWeight: 600 }}>
+                  Privacy Policy
+                </a>
+              </label>
+            </div>
+            {submitted && !agreedToTerms && (
+              <small className="text-danger d-block mt-2" style={{ marginLeft: "26px" }}>
+                *You must agree to the Terms and Privacy Policy
+              </small>
+            )}
+          </div>
+
           <button
             type="submit"
             className="btn primary-action w-100 mt-3"
@@ -656,6 +693,25 @@ function Signup() {
         /* hover and small helpers */
         .hover-bg:hover { background-color: #F8F7F5; }
         .text-danger { color: #F08080 !important; } /* Unclaimed / error color */
+
+        /* Checkbox styling */
+        .form-check-input {
+          border: 2px solid #D4C9BE;
+          accent-color: #123458;
+        }
+
+        .form-check-input:checked {
+          background-color: #123458;
+          border-color: #123458;
+        }
+
+        a {
+          transition: opacity 0.2s;
+        }
+
+        a:hover {
+          opacity: 0.8;
+        }
       `}</style>
     </div>
   );

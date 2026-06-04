@@ -3,7 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import UserFilterPanel from "./UserFilterPanel";
 import { BsSearch, BsArrowCounterclockwise } from "react-icons/bs";
 import { CiFilter } from "react-icons/ci";
-import { FaSortUp, FaSortDown, FaUser, FaEnvelope, FaUserTag, FaShieldAlt, FaToggleOn, FaSave, FaTimes, FaArchive, FaFilter, FaEdit, FaUndo, FaEllipsisV } from "react-icons/fa";
+import { FaSortUp, FaSortDown, FaUser, FaEnvelope, FaUserTag, FaShieldAlt, FaToggleOn, FaSave, FaTimes, FaArchive, FaFilter, FaEdit, FaUndo, FaEllipsisV, FaCalendarAlt } from "react-icons/fa";
 import { TiArrowUnsorted } from "react-icons/ti";
 import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
@@ -12,6 +12,7 @@ import { fetchWithAuth } from "../../../utils/fetchWithAuth";
  * - Desktop (md+): table view (unchanged visually).
  * - Mobile (below md): stacked card list with the same actions.
  * - Header controls wrap and stretch on small screens for usability.
+ * - Guest accounts are excluded from display (both desktop & mobile)
  */
 
 function UserManagement() {
@@ -147,9 +148,8 @@ function UserManagement() {
     if (type === "student") {
       return /^\d{4}-\d{4}$/.test(username);
     }
-    const MAX_LENGTH = 16;
-    const MIN_LENGTH = 8;
-    return typeof username === "string" && username.length <= MAX_LENGTH && username.length >= MIN_LENGTH;
+    // For non-students: check length between 8 and 16 characters
+    return typeof username === "string" && username.trim().length >= 8 && username.trim().length <= 16;
   };
 
   const isValidEmail = (email) => {
@@ -175,20 +175,33 @@ function UserManagement() {
     }
 
     try {
+      // Build a flat body that matches what the backend updateUser expects
+      const creds = editedUser.userCredentials || {};
+      const payload = {
+        firstname: editedUser.firstname,
+        lastname: editedUser.lastname,
+        username: creds.username,  // ✅ ADD THIS
+        email: creds.email,
+        status: creds.status,
+        type: creds.type,
+        institute: creds.institute,
+        program: creds.program,
+      };
+
       const res = await fetchWithAuth(
         `${API_BASE_URL}/api/users/${editedUser._id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(editedUser),
+          body: JSON.stringify(payload),
         }
       );
 
       const updated = await res.json();
 
       if (!res.ok) {
-        showToast(updated.errorMessage || "Update failed", "danger");
+        showToast(updated.error || updated.errorMessage || "Update failed", "danger");
         return;
       }
 
@@ -298,11 +311,14 @@ function UserManagement() {
     }
   };
 
-  /* ---------------- FILTERING ---------------- */
+  /* ---------------- FILTERING (EXCLUDING GUESTS) ---------------- */
   const visibleUsers = useMemo(() => {
-    return users.filter((u) =>
-      userAdvancedFilters.archived ? Boolean(u.archivedAt) : !u.archivedAt
-    );
+    return users.filter((u) => {
+      // ✅ EXCLUDE GUEST ACCOUNTS
+      if (u.isGuest) return false;
+      
+      return userAdvancedFilters.archived ? Boolean(u.archivedAt) : !u.archivedAt;
+    });
   }, [users, userAdvancedFilters.archived]);
 
   const isoDateFor = useCallback((u) => {
@@ -530,16 +546,33 @@ function UserManagement() {
         </div>
 
         <div className="d-flex gap-2 align-items-center mt-2 mt-md-0 flex-wrap">
-          {/* Date filter */}
-          <input
-            type="date"
-            className="form-control"
-            style={{ maxWidth: 160, height: "37px", border: "1px solid #D4C9BE" }}
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            aria-label="Filter by date"
-            title="Filter by date"
-          />
+          {/* Date filter with icon */}
+          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+            <FaCalendarAlt
+              style={{
+                position: "absolute",
+                left: "10px",
+                color: "#6b6b6b",
+                pointerEvents: "none",
+                zIndex: 1,
+              }}
+              size={14}
+            />
+            <input
+              type="date"
+              className="form-control"
+              style={{ 
+                maxWidth: 160, 
+                height: "37px", 
+                border: "1px solid #D4C9BE",
+                paddingLeft: "36px", // Make room for icon
+              }}
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              aria-label="Filter by date"
+              title="Filter by date"
+            />
+          </div>
 
           {/* Advanced filters button */}
           <button

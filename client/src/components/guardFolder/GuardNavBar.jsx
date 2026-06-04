@@ -85,7 +85,7 @@ function GuardNavBar() {
         {/* Icons */}
         <div className="d-flex align-items-center gap-3 position-relative">
           {/* 🔔 Notifications */}
-          <div ref={notifRef}>
+          {/* <div ref={notifRef}>
             <FaBell
               size={20}
               onClick={() => {
@@ -140,7 +140,7 @@ function GuardNavBar() {
                 </ul>
               </div>
             )}
-          </div>
+          </div> */}
 
           {/* ☰ Menu */}
           <div ref={menuRef}>

@@ -1,13 +1,13 @@
-// full file — only functional changes are: refreshItems accepts `archived` and useEffect now re-fetches when advancedFilters.archived changes
+// full file — added pagination state, pagination logic, and pagination UI at bottom
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { LuArchiveX } from "react-icons/lu";
 import { IoCheckmarkCircleOutline } from "react-icons/io5";
-import { FaRegCalendarAlt, FaFilePdf } from "react-icons/fa";
+import { FaRegCalendarAlt, FaFilePdf, FaEye, FaEdit, FaArchive, FaUndo, FaSortUp, FaSortDown } from "react-icons/fa";
 import { IoIosArrowDown } from "react-icons/io";
 import { CiFilter } from "react-icons/ci";
 import { MdOutlineKeyboardArrowRight } from "react-icons/md";
-import { BsSearch } from "react-icons/bs";
+import { BsSearch, BsArrowCounterclockwise } from "react-icons/bs";
 import jsPDF from "jspdf";
 import "bootstrap/dist/css/bootstrap.min.css";
 import FilterPanel from "./FilterPanel";
@@ -22,6 +22,7 @@ function GuardItemManagement() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
   const [expandedId, setExpandedId] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -49,6 +50,15 @@ function GuardItemManagement() {
   // Selection for archived items
   const [selectedArchivedIds, setSelectedArchivedIds] = useState([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
+  // PAGINATION state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Reset to page 1 when search or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, dateFilter, advancedFilters]);
 
   const guardInfo = JSON.parse(localStorage.getItem("user")) || {};
   const guardId = guardInfo.id;
@@ -297,7 +307,9 @@ function GuardItemManagement() {
     setStatusFilter("All");
     setSearchQuery("");
     handleClearAdvancedFilters();
-    showToast("Filters cleared", "success");
+    setFilterPanelOpen(false);
+    setStatusDropdownOpen(false);
+    showToast("All filters cleared", "success");
   };
 
   // Visible set: server returns full items (or archived subset when ?archived=true); client decides visible set
@@ -345,6 +357,12 @@ function GuardItemManagement() {
       return matchesStatus && matchesDate && matchesSearch && matchesName && matchesDescriptions && matchesPenaltyMode && matchesPenaltyRange;
     });
   }, [visibleItems, statusFilter, dateFilter, searchQuery, advancedFilters]);
+
+  // Paginated set
+  const paginatedItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredItems.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredItems, currentPage, itemsPerPage]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -477,260 +495,740 @@ function GuardItemManagement() {
     else setSelectedArchivedIds(ids);
   };
 
-
   return (
-    <div className="d-flex flex-column" style={{ height: "100%", backgroundColor: "#F1EFEC", color: "#030303" }}>
-      {/* Header / filters (shared) */}
-      <div className="sticky-top bg-white border-bottom" style={{ zIndex: 1020 }}>
-        <div className="container-fluid p-2">
-          <div className="row g-2 align-items-center">
-            <div className="col-12 col-md-7 d-flex gap-2 align-items-center flex-wrap">
-              <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: "#123458", color: "#F1EFEC", minWidth: 42, height: "37px" }} onClick={() => datePickerRef.current?.showPicker?.()} aria-label="Open date picker" title="Select date">
-                <FaRegCalendarAlt />
-              </button>
+    <div
+      className="container-fluid p-2 d-flex flex-column"
+      style={{
+        height: "100%",
+      }}
+    >
+      {/* HEADER */}
+      <div
+        className="d-flex justify-content-between mb-2 p-3 rounded flex-wrap"
+        style={{ background: "#FFF", border: "1px solid #D4C9BE" }}
+      >
+        <div className="me-2" style={{ minWidth: 220 }}>
+          <h4 className="fw-semibold mb-1">Guard Item Management</h4>
+          <small style={{ color: "#6b6b6b" }}>
+            Monitor, verify, and manage all items
+          </small>
+        </div>
 
-              {/* Date input with visible label/placeholder on mobile */}
-              <div style={{ position: "relative", minWidth: 150 }}>
-                <input ref={datePickerRef} id="filterDate" type="date" className="form-control" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} style={{ maxWidth: 150, border: "1px solid #D4C9BE" }} aria-label="Filter by date" />
-              </div>
-
-              <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ maxWidth: 195, border: "1px solid #D4C9BE" }} aria-label="Filter by status">
-                {["All", "Deposited", "Claimed", "Unclaimed"].map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-
-              <div ref={filterContainerRef} style={{ position: "relative" }}>
-                <button type="button" className="form-control btn d-inline-flex align-items-center justify-content-center" onClick={() => setFilterPanelOpen((v) => !v)} aria-expanded={filterPanelOpen} aria-label="Open advanced filter" title="Advanced filters" style={{ border: activeFilterCount > 0 ? "2px solid #123458" : "1px solid #D4C9BE", color: activeFilterCount > 0 ? "#123458" : "#030303", fontWeight: activeFilterCount > 0 ? 600 : 400 }}>
-                  <CiFilter />
-                  <span className="ms-1">Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}</span>
-                </button>
-
-                <FilterPanel show={filterPanelOpen} onClose={() => setFilterPanelOpen(false)} onApply={handleApplyAdvancedFilters} onClear={() => { handleClearAdvancedFilters(); showToast("Advanced filters cleared", "success"); }} initialFilters={advancedFilters} anchorRef={filterContainerRef} />
-              </div>
-
-              <div>
-                <button type="button" className="form-control btn d-inline-flex align-items-center justify-content-center" onClick={handleClearAll} style={{ border: "1px solid #D4C9BE" }}>
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div className="col-12 col-md-5 d-flex gap-2 justify-content-start justify-content-md-end">
-              <div style={{ position: "relative", width: "100%" }}>
-                <BsSearch style={{ position: "absolute", top: "50%", left: "10px", transform: "translateY(-50%)", color: "#6b6b6b", pointerEvents: "none" }} />
-
-                <input type="text" className="form-control" placeholder="Search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} aria-label="Search items" style={{ paddingLeft: "32px", border: "1px solid #D4C9BE", minWidth: 0 }} />
-              </div>
-
-              {/* When archived mode is ON show Unarchive selected button */}
-              {advancedFilters.archived && (
-                <div className="d-flex align-items-center gap-2">
-                  <div className="small text-muted me-2">{selectedArchivedIds.length} selected</div>
-                  <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: selectedArchivedIds.length > 0 ? "#123458" : "#D4C9BE", color: "#F1EFEC", minWidth: 44 }} disabled={selectedArchivedIds.length === 0 || bulkActionLoading} onClick={unarchiveSelected} title="Unarchive selected">
-                    Unarchive
-                  </button>
-                </div>
-              )}
-
-              <button type="button" className="btn d-inline-flex align-items-center justify-content-center" style={{ background: filteredItems.length > 0 ? "#123458" : "#D4C9BE", color: "#F1EFEC", minWidth: 44 }} disabled={filteredItems.length === 0} onClick={() => openConfirm(null, "download")} aria-label="Download PDF" title={filteredItems.length > 0 ? "Download PDF" : "No items to download"}>
-                <FaFilePdf />
-              </button>
-            </div>
+        <div className="d-flex gap-2 align-items-center mt-2 mt-md-0 flex-wrap flex-md-nowrap">
+          <div style={{ position: "relative", minWidth: 150 }}>
+            <button
+              type="button"
+              className="btn shadow-sm w-100 d-flex justify-content-between align-items-center"
+              style={{
+                height: "37px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                color: "#334155",
+                backgroundColor: "#fff",
+                padding: "0 12px",
+              }}
+              onClick={() => datePickerRef.current?.showPicker?.()}
+              title="Select date"
+            >
+              <FaRegCalendarAlt size={16} />
+              <span className="ms-2 flex-grow-1 text-start" style={{ fontSize: "0.9rem" }}>
+                {dateFilter || "Date"}
+              </span>
+            </button>
+            <input
+              ref={datePickerRef}
+              type="date"
+              className="form-control"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              style={{ position: "absolute", left: 0, top: 0, opacity: 0, width: 0, height: 0 }}
+              aria-label="Filter by date"
+            />
           </div>
+
+          <div className="position-relative" style={{ minWidth: 160, zIndex: 1045 }}>
+            <button
+              className="btn shadow-sm w-100 d-flex justify-content-between align-items-center transition-hover"
+              style={{
+                height: "37px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                color: "#334155",
+                backgroundColor: "#fff",
+                padding: "0 12px"
+              }}
+              onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+            >
+              <div className="d-flex align-items-center gap-2">
+                {statusFilter}
+              </div>
+              <FaSortDown className="mb-1 text-muted" />
+            </button>
+            
+            {statusDropdownOpen && (
+              <>
+                <div 
+                  style={{ position: "fixed", inset: 0, zIndex: 1040 }} 
+                  onClick={() => setStatusDropdownOpen(false)}
+                />
+                <div 
+                  className="position-absolute shadow-lg p-2" 
+                  style={{
+                    top: "100%", left: 0, width: "200px", marginTop: "6px",
+                    backgroundColor: "#fff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "12px",
+                    zIndex: 1050,
+                    display: "flex", flexDirection: "column", gap: "6px"
+                  }}
+                >
+                  <div className="text-muted small fw-bold px-2 pb-1" style={{ fontSize: "0.7rem", letterSpacing: "0.5px" }}>FILTER BY STATUS</div>
+                  {[
+                    { value: "All", label: "All Statuses", color: "#64748b", bg: "#f1f5f9" },
+                    { value: "Deposited", label: "Deposited", color: "#3b82f6", bg: "#eff6ff" },
+                    { value: "Claimed", label: "Claimed", color: "#10b981", bg: "#ecfdf5" },
+                    { value: "Unclaimed", label: "Unclaimed", color: "#ef4444", bg: "#fef2f2" },
+                    { value: "Pending Verification", label: "Claim Request", color: "#f59e0b", bg: "#fffbeb" },
+                    { value: "Settled", label: "Settled", color: "#17a2b8", bg: "#faf5ff" }
+                  ].map((opt) => (
+                    <div
+                      key={opt.value}
+                      className="p-2 rounded d-flex align-items-center gap-2 transition-hover"
+                      style={{
+                        cursor: "pointer",
+                        backgroundColor: statusFilter === opt.value ? opt.bg : "transparent",
+                        color: statusFilter === opt.value ? opt.color : "#475569",
+                        fontWeight: statusFilter === opt.value ? "600" : "500",
+                        border: statusFilter === opt.value ? `1px solid ${opt.color}40` : "1px solid transparent",
+                      }}
+                      onClick={() => {
+                        setStatusFilter(opt.value);
+                        setStatusDropdownOpen(false);
+                      }}
+                      onMouseEnter={(e) => {
+                        if(statusFilter !== opt.value) e.currentTarget.style.backgroundColor = "#f8fafc";
+                      }}
+                      onMouseLeave={(e) => {
+                        if(statusFilter !== opt.value) e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: opt.color }}></div>
+                      {opt.label}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div ref={filterContainerRef} style={{ position: "relative" }}>
+            <button
+              className="btn shadow-sm d-inline-flex align-items-center transition-hover"
+              onClick={() => setFilterPanelOpen((v) => !v)}
+              title="Advanced filters"
+              style={{
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                background: activeFilterCount > 0 ? "#123458" : filterPanelOpen ? "#f1f5f9" : "#fff",
+                color: activeFilterCount > 0 ? "#fff" : "#334155",
+                height: "37px",
+                padding: "0 14px",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+              aria-expanded={filterPanelOpen}
+            >
+              <CiFilter size={20} />
+              <span className="d-none d-md-inline ms-1">Filters</span>
+              {activeFilterCount > 0 && (
+                <span 
+                  className="position-absolute badge rounded-pill"
+                  style={{ 
+                    top: "-4px",
+                    right: "2px",
+                    background: "#F08080", 
+                    fontSize: "0.65rem",
+                    border: "2px solid #fff",
+                    zIndex: 1,
+                    padding: "4px 6px"
+                  }}
+                >
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            <FilterPanel
+              show={filterPanelOpen}
+              onClose={() => setFilterPanelOpen(false)}
+              onApply={handleApplyAdvancedFilters}
+              onClear={() => {
+                handleClearAdvancedFilters();
+                setFilterPanelOpen(false);
+                showToast("Advanced filters cleared", "success");
+              }}
+              initialFilters={advancedFilters}
+              anchorRef={filterContainerRef}
+            />
+          </div>
+
+          <button
+            className="btn shadow-sm d-inline-flex align-items-center justify-content-center transition-hover"
+            style={{ 
+              height: "37px", 
+              minWidth: "42px", 
+              border: "1px solid #e2e8f0", 
+              borderRadius: "8px",
+              backgroundColor: "#fff",
+              color: "#64748b" 
+            }}
+            onClick={handleClearAll}
+            title="Clear filters"
+          >
+            <BsArrowCounterclockwise className="d-md-none" />
+            <span className="d-none d-md-inline">Clear</span>
+          </button>
+          
+          <div className="shadow-sm" style={{ position: "relative", minWidth: 140, maxWidth: 264, borderRadius: "8px" }}>
+            <BsSearch
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "12px",
+                transform: "translateY(-50%)",
+                color: "#94a3b8",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search items"
+              style={{ 
+                width: "100%", 
+                border: "1px solid #e2e8f0", 
+                borderRadius: "8px",
+                height: "37px", 
+                paddingLeft: "36px",
+                backgroundColor: "#fff",
+                color: "#334155"
+              }}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="btn shadow-sm d-inline-flex align-items-center justify-content-center"
+            style={{
+              height: "37px",
+              minWidth: "42px",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              backgroundColor: filteredItems.length > 0 ? "#123458" : "#D4C9BE",
+              color: "#fff",
+            }}
+            disabled={filteredItems.length === 0}
+            onClick={() => openConfirm(null, "download")}
+            aria-label="Download PDF"
+            title={filteredItems.length > 0 ? "Download PDF" : "No items to download"}
+          >
+            <FaFilePdf />
+          </button>
         </div>
       </div>
 
-      {/* CONTENT AREA */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-        {/* MOBILE: card list */}
-        <div className="d-md-none p-2" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-          {loadingItems ? (
-            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
-              ⏳ Loading items...
+      {/* TABLE CARD */}
+      <div
+        className="rounded d-flex flex-column flex-grow-1 shadow-sm"
+        style={{
+          background: "#FFF",
+          border: "1px solid #D4C9BE",
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          className="px-3 py-2 fw-semibold d-flex justify-content-between align-items-center"
+          style={{ borderBottom: "1px solid #D4C9BE", color: "#030303" }}
+        >
+          <div>Guard Items Overview</div>
+
+          {/* When viewing archived items, show Unarchive selected button */}
+          {advancedFilters.archived && (
+            <div className="d-flex gap-2 align-items-center">
+              <div className="small text-muted me-2">
+                {selectedArchivedIds.length} selected
+              </div>
+              <button
+                className="btn btn-sm"
+                style={{ background: "#123458", color: "#fff" }}
+                onClick={unarchiveSelected}
+                disabled={selectedArchivedIds.length === 0 || bulkActionLoading}
+                title="Unarchive selected items"
+              >
+                Unarchive selected
+              </button>
             </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
-              {items.length === 0 ? "📦 No items currently deposited" : "🔍 No items matched your filter/search"}
-            </div>
-          ) : (
-            filteredItems.map((item) => {
-              const isExpanded = expandedId === item._id;
-              const statusColor = item.status === "Deposited" ? "#D4C9BE" : item.status === "Claimed" ? "#90EE90" : item.status === "Unclaimed" ? "#F08080" : "#FFD700";
-
-              // Determine owner display (supports guest fields)
-              const ownerName = (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`.trim()) || item.guestName || `${item.firstname || ""} ${item.lastname || ""}`.trim();
-
-              return (
-                <div key={item._id} className="rounded p-3 mb-2 shadow-sm" style={{ background: "#FFFFFF", border: "1px solid #D4C9BE" }}>
-                  <div className="d-flex">
-                    <div style={{ marginRight: 10 }}>
-                      {advancedFilters.archived && (
-                        <input type="checkbox" checked={selectedArchivedIds.includes(item._id)} onChange={() => toggleSelectArchived(item._id)} aria-label={`Select archived item ${item.description}`} />
-                      )}
-                    </div>
-
-                    <img src={item.photoUrl || "/logo.png"} alt="" style={{ width: 70, height: 70, borderRadius: 8, objectFit: "cover", marginRight: 10, border: "1px solid #D4C9BE", cursor: "pointer" }} onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")} />
-                    <div className="flex-grow-1 d-flex flex-column justify-content-between">
-                      <div className="d-flex justify-content-between align-items-center w-100">
-                        <div className="d-flex align-items-center gap-2">
-                          <h6 className="mb-0">{ownerName}</h6>
-                        </div>
-                        <div className="d-flex align-items-center" style={{ gap: "3px" }}>
-                          <small style={{ color: item.penalty > 0 ? "red" : "#D4C9BE", fontWeight: item.penalty > 0 ? "bold" : "normal", backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none" }}>{item.penalty || 0}P</small>
-                          <button type="button" className="btn btn-sm d-flex align-items-center justify-content-center" style={{ color: "#123458" }} onClick={() => setExpandedId(isExpanded ? null : item._id)}>
-                            {isExpanded ? <IoIosArrowDown size={20} /> : <MdOutlineKeyboardArrowRight size={20} />}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="d-flex justify-content-between align-items-center mt-2">
-                        <button type="button" className="btn btn-sm" style={{ background: statusColor, color: item.status === "Unclaimed" ? "white" : "#030303", border: "1px solid #D4C9BE" }}>
-                          {item.status}
-                        </button>
-
-                        <div className="d-flex gap-2">
-                          {advancedFilters.archived ? (
-                            <button type="button" className="btn btn-sm" style={{ border: "1px solid #123458", color: "#123458" }} onClick={() => performUnarchive(item._id)}>
-                              Unarchive
-                            </button>
-                          ) : (
-                            <>
-                              <button type="button" className="btn btn-sm" style={{ background: "#123458", color: "#F1EFEC", opacity: item.status === "Claimed" ? 0.7 : 1 }} disabled={item.status === "Claimed"} onClick={() => openConfirm(item, "verify")}>
-                                <IoCheckmarkCircleOutline /> Verify
-                              </button>
-
-                              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => openConfirm(item, "archive")} style={{ border: "1px solid #D4C9BE" }}>
-                                <LuArchiveX />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="mt-2 pt-2 border-top" style={{ borderColor: "#D4C9BE" }}>
-                      <p className="mb-1">{item.description}</p>
-                      <small className="text-muted">{formatDate(advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt)}</small>
-                    </div>
-                  )}
-                </div>
-              );
-            })
           )}
         </div>
 
-        {/* DESKTOP: table */}
-        <div className="d-none d-md-block p-2 container-fluid" style={{ flex: 1, minHeight: 0 }}>
+        <div className="table-responsive flex-grow-1" style={{ overflowY: "auto" }}>
           {loadingItems ? (
-            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
-              ⏳ Loading items...
-            </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
-              {items.length === 0 ? "📦 No items currently deposited" : "🔍 No items matched your filter/search"}
-            </div>
+            <p className="text-center p-3" style={{ color: "#D4C9BE" }}>
+              Loading items…
+            </p>
           ) : (
-            <div className="table-responsive" style={{ height: "100%", overflowY: "auto", background: "#FFFFFF", border: "1px solid #D4C9BE" }}>
-              <table className="table table-hover align-middle mb-0">
-                <thead className="table-light">
-                  <tr>
-                    <th style={{ width: 48 }} className="text-center">
-                      {advancedFilters.archived ? <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} aria-label="Select all archived items" /> : "#"}
-                    </th>
-                    <th style={{ width: 80 }} className="text-center">
-                      Photo
-                    </th>
-                    <th>Owner</th>
-                    <th>Description</th>
-                    <th style={{ width: 140 }}>{advancedFilters.archived ? "Archived Date" : "Date"}</th>
-                    <th style={{ width: 120 }} className="text-center">
-                      Status
-                    </th>
-                    <th style={{ width: 100 }} className="text-center">
-                      Penalty
-                    </th>
-                    <th style={{ width: 210 }} className="text-center">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item, index) => {
-                    const statusColor = item.status === "Deposited" ? "#D4C9BE" : item.status === "Claimed" ? "#90EE90" : item.status === "Unclaimed" ? "#F08080" : "#FFD700";
-                    const ownerName = (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`.trim()) || item.guestName || `${item.firstname || ""} ${item.lastname || ""}`.trim();
+            <>
+              {/* Desktop table (md+) */}
+              <div className="d-none d-md-block">
+                <table className="table mb-0 align-middle">
+                  <colgroup>
+                    <col style={{ width: "4%" }} />
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "28%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "8%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
+                        {advancedFilters.archived ? (
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected}
+                            onChange={toggleSelectAll}
+                            aria-label="Select all displayed archived items"
+                          />
+                        ) : (
+                          "#"
+                        )}
+                      </th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Photo</th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Owner</th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>Description</th>
+                      <th style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}>
+                        {advancedFilters.archived ? "Archived Date" : "Date"}
+                      </th>
+                      <th
+                        className="text-center"
+                        style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                      >
+                        Status
+                      </th>
+                      <th
+                        className="text-center"
+                        style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                      >
+                        Penalty
+                      </th>
+                      <th
+                        className="text-center"
+                        style={{ position: "sticky", top: 0, background: "#FFF", zIndex: 2 }}
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((item, index) => {
+                      const statusColor =
+                        item.status === "Deposited"
+                          ? "#D4C9BE"
+                          : item.status === "Claimed"
+                          ? "#90EE90"
+                          : item.status === "Settled"
+                          ? "#17a2b8"
+                          : item.status === "Pending Verification"
+                          ? "#f59e0b"
+                          : "#F08080";
+                      const ownerName =
+                        (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`.trim()) ||
+                        item.guestName ||
+                        `${item.firstname || ""} ${item.lastname || ""}`.trim();
 
-                    return (
-                      <tr key={item._id}>
-                        <td className="text-center" style={{ verticalAlign: "middle" }}>
-                          {advancedFilters.archived ? (
-                            <input type="checkbox" checked={selectedArchivedIds.includes(item._id)} onChange={() => toggleSelectArchived(item._id)} aria-label={`Select archived item ${item.description}`} />
-                          ) : (
-                            index + 1
-                          )}
-                        </td>
-
-                        <td className="text-center">
-                          <img src={item.photoUrl || "/logo.png"} alt={`${item.userId?.firstname || ownerName || ""}`} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: "1px solid #D4C9BE" }} onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")} />
-                        </td>
-
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{ownerName}</div>
-                          <div className="text-muted" style={{ fontSize: ".85rem" }}>
-                            {item.userId?.email || ""}
-                          </div>
-                        </td>
-
-                        <td style={{ wordBreak: "break-word", maxWidth: 360 }}>{item.description || "-"}</td>
-
-                        <td>
-                          <small className="text-muted">{formatDate(advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt)}</small>
-                        </td>
-
-                        <td className="text-center">
-                          <span className="badge" style={{ background: statusColor, color: item.status === "Unclaimed" ? "#fff" : "#000" }}>
-                            {item.status}
-                          </span>
-                        </td>
-
-                        <td className="text-center">
-                          <small style={{ color: item.penalty > 0 ? "red" : "#6c757d", fontWeight: item.penalty > 0 ? 700 : 400, backgroundColor: item.penalty > 0 ? "#ffe5e5" : "transparent", padding: "2px 6px", borderRadius: 4, border: item.penalty > 0 ? "1px solid red" : "none" }}>{item.penalty || 0}P</small>
-                        </td>
-
-                        <td className="text-center">
-                          <div className="d-flex justify-content-center gap-2">
+                      return (
+                        <tr key={item._id}>
+                          <td style={{ verticalAlign: "middle" }}>
                             {advancedFilters.archived ? (
-                              <button type="button" className="btn btn-sm" style={{ border: "1px solid #123458", color: "#123458", minWidth: 84 }} onClick={() => performUnarchive(item._id)} title="Unarchive item">
-                                Unarchive
+                              <input
+                                type="checkbox"
+                                checked={selectedArchivedIds.includes(item._id)}
+                                onChange={() => toggleSelectArchived(item._id)}
+                                aria-label={`Select archived item ${item.description}`}
+                              />
+                            ) : (
+                              index + 1 + (currentPage - 1) * itemsPerPage
+                            )}
+                          </td>
+
+                          <td>
+                            <img
+                              src={item.photoUrl || "/logo.png"}
+                              alt={ownerName}
+                              style={{
+                                width: 50,
+                                height: 50,
+                                objectFit: "cover",
+                                borderRadius: 6,
+                                cursor: "pointer",
+                                border: "1px solid #D4C9BE",
+                              }}
+                              onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")}
+                            />
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{ownerName}</div>
+                            <div className="text-muted" style={{ fontSize: ".85rem" }}>
+                              {item.userId?.email || ""}
+                            </div>
+                          </td>
+
+                          <td style={{ wordBreak: "break-word", maxWidth: 360 }}>
+                            {item.description || "-"}
+                          </td>
+
+                          <td>
+                            <small className="text-muted">
+                              {formatDate(advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt)}
+                            </small>
+                          </td>
+
+                          <td className="text-center">
+                            <span
+                              className="px-2 py-1 rounded small"
+                              style={{
+                                background: statusColor,
+                                color: (item.status === "Unclaimed" || item.status === "Settled") ? "#F1EFEC" : "",
+                              }}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+
+                          <td className="text-center">
+                            <small
+                              style={{
+                                color: item.penalty > 0 ? "red" : "#6c757d",
+                                fontWeight: item.penalty > 0 ? 700 : 400,
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                border: "none",
+                              }}
+                            >
+                              ₱{item.penalty || 0}
+                            </small>
+                          </td>
+
+                          <td className="text-center">
+                            {advancedFilters.archived ? (
+                              <button
+                                type="button"
+                                className="btn btn-sm d-flex align-items-center justify-content-center"
+                                style={{
+                                  border: "1px solid #123458",
+                                  color: "#123458",
+                                  width: "32px",
+                                  height: "32px",
+                                  padding: 0,
+                                }}
+                                onClick={() => performUnarchive(item._id)}
+                                title="Unarchive"
+                              >
+                                <FaUndo size={14} />
                               </button>
                             ) : (
-                              <>
-                                <button type="button" className="btn btn-sm" style={{ background: "#123458", color: "#F1EFEC", minWidth: 84 }} disabled={item.status === "Claimed"} onClick={() => openConfirm(item, "verify")} title={item.status === "Claimed" ? "Already verified" : "Verify"}>
-                                  <IoCheckmarkCircleOutline /> <span className="ms-1">Verify</span>
+                              <div className="d-flex justify-content-center gap-2">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm d-flex align-items-center justify-content-center"
+                                  style={{
+                                    background: "#123458",
+                                    color: "#F1EFEC",
+                                    width: "32px",
+                                    height: "32px",
+                                    padding: 0,
+                                    opacity: item.status === "Claimed" ? 0.5 : 1,
+                                  }}
+                                  disabled={item.status === "Claimed"}
+                                  onClick={() => openConfirm(item, "verify")}
+                                  title={item.status === "Claimed" ? "Already verified" : "Verify"}
+                                >
+                                  <IoCheckmarkCircleOutline size={16} />
                                 </button>
 
-                                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => openConfirm(item, "archive")} style={{ border: "1px solid #D4C9BE", minWidth: 56 }} title="Archive item">
-                                  <LuArchiveX />
+                                <button
+                                  type="button"
+                                  className="btn btn-sm d-flex align-items-center justify-content-center"
+                                  style={{
+                                    border: "1px solid #F08080",
+                                    color: "#F08080",
+                                    width: "32px",
+                                    height: "32px",
+                                    padding: 0,
+                                  }}
+                                  onClick={() => openConfirm(item, "archive")}
+                                  title="Archive"
+                                >
+                                  <FaArchive size={14} />
                                 </button>
-                              </>
+                              </div>
                             )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile list (below md): stacked cards */}
+              <div className="d-block d-md-none p-2">
+                {paginatedItems.length === 0 ? (
+                  <div className="text-center mt-5" style={{ color: "#123458", fontWeight: 500 }}>
+                    {items.length === 0 ? "📦 No items currently deposited" : "🔍 No items matched your filter/search"}
+                  </div>
+                ) : (
+                  paginatedItems.map((item) => {
+                    const isExpanded = expandedId === item._id;
+                    const statusColor =
+                      item.status === "Deposited"
+                        ? "#D4C9BE"
+                        : item.status === "Claimed"
+                        ? "#90EE90"
+                        : item.status === "Settled"
+                        ? "#17a2b8"
+                        : item.status === "Pending Verification"
+                        ? "#f59e0b"
+                        : "#F08080";
+                    const ownerName =
+                      (item.userId && `${item.userId.firstname || ""} ${item.userId.lastname || ""}`.trim()) ||
+                      item.guestName ||
+                      `${item.firstname || ""} ${item.lastname || ""}`.trim();
+
+                    return (
+                      <div
+                        key={item._id}
+                        className="card mb-2"
+                        style={{ border: "1px solid #D4C9BE", background: "#FFFFFF" }}
+                      >
+                        <div className="card-body p-2">
+                          <div className="d-flex align-items-start gap-2">
+                            {advancedFilters.archived && (
+                              <div style={{ marginTop: 8 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedArchivedIds.includes(item._id)}
+                                  onChange={() => toggleSelectArchived(item._id)}
+                                  aria-label={`Select archived item ${item.description}`}
+                                />
+                              </div>
+                            )}
+
+                            <img
+                              src={item.photoUrl || "/logo.png"}
+                              alt={ownerName}
+                              style={{
+                                width: 64,
+                                height: 64,
+                                borderRadius: 8,
+                                objectFit: "cover",
+                                border: "1px solid #D4C9BE",
+                                cursor: "pointer",
+                              }}
+                              onClick={() => setFullscreenImage(item.photoUrl || "/logo.png")}
+                            />
+                            <div className="flex-grow-1">
+                              <div className="d-flex justify-content-between align-items-start">
+                                <div>
+                                  <strong className="d-block">{ownerName}</strong>
+                                  <small className="text-muted">{item.userId?.email || ""}</small>
+                                </div>
+                                <div className="text-end">
+                                  <small
+                                    style={{
+                                      color: item.penalty > 0 ? "red" : "#6c757d",
+                                      fontWeight: item.penalty > 0 ? "bold" : "normal",
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                      border: "none",
+                                      display: "inline-block",
+                                    }}
+                                  >
+                                    ₱{item.penalty || 0}
+                                  </small>
+                                </div>
+                              </div>
+
+                              <div className="d-flex justify-content-between align-items-center mt-2">
+                                <span
+                                  className="px-2 py-1 rounded small"
+                                  style={{
+                                    background: statusColor,
+                                    color: (item.status === "Unclaimed" || item.status === "Settled") ? "#F1EFEC" : "",
+                                  }}
+                                >
+                                  {item.status === "Pending Verification" ? "Claim Request" : item.status}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  className="btn btn-sm d-flex align-items-center justify-content-center"
+                                  style={{ color: "#123458" }}
+                                  onClick={() => setExpandedId(isExpanded ? null : item._id)}
+                                >
+                                  {isExpanded ? <IoIosArrowDown size={20} /> : <MdOutlineKeyboardArrowRight size={20} />}
+                                </button>
+                              </div>
+
+                              {isExpanded && (
+                                <div className="mt-2 pt-2 border-top" style={{ borderColor: "#D4C9BE" }}>
+                                  <p className="mb-1 small">{item.description}</p>
+                                  <small className="text-muted">
+                                    {formatDate(advancedFilters.archived && item.archivedAt ? item.archivedAt : item.createdAt)}
+                                  </small>
+
+                                  <div className="d-flex gap-2 mt-2">
+                                    {advancedFilters.archived ? (
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm"
+                                        style={{ border: "1px solid #123458", color: "#123458" }}
+                                        onClick={() => performUnarchive(item._id)}
+                                      >
+                                        Unarchive
+                                      </button>
+                                    ) : (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm"
+                                          style={{
+                                            background: "#123458",
+                                            color: "#F1EFEC",
+                                            opacity: item.status === "Claimed" ? 0.5 : 1,
+                                          }}
+                                          disabled={item.status === "Claimed"}
+                                          onClick={() => openConfirm(item, "verify")}
+                                        >
+                                          <IoCheckmarkCircleOutline /> Verify
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm"
+                                          style={{ border: "1px solid #F08080", color: "#F08080" }}
+                                          onClick={() => openConfirm(item, "archive")}
+                                        >
+                                          <FaArchive />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  })
+                )}
+              </div>
+            </>
           )}
+        </div>
+
+        {/* PAGINATION FOOTER */}
+        <div className="px-2 py-2 border-top d-flex flex-wrap justify-content-between align-items-center gap-2 bg-light mt-auto" style={{ borderRadius: "0 0 8px 8px" }}>
+          {/* Result Count & Rows Selector (Compact on Mobile) */}
+          <div className="d-flex align-items-center gap-2 flex-grow-1">
+            <div className="small fw-medium text-dark text-nowrap d-none d-sm-block" style={{ fontSize: "0.85rem" }}>
+              <span className="d-none d-sm-inline text-muted fw-normal">Found</span> {filteredItems.length}{" "}
+              <span className="d-none d-sm-inline text-muted fw-normal">items.</span>{" "}
+              <span className="fw-bold">{filteredItems.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)}</span>
+              <span className="text-muted fw-normal ms-1">of {filteredItems.length}</span>
+            </div>
+
+            <div className="d-flex align-items-center gap-1 ms-auto ms-sm-2">
+              <small className="text-muted d-none d-sm-inline" style={{ fontSize: "0.75rem" }}>Rows:</small>
+              <select
+                className="form-select form-select-sm py-0 px-1"
+                style={{ width: "55px", fontSize: "0.75rem", height: "24px", border: "1px solid #D4C9BE" }}
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="d-flex align-items-center gap-1">
+            <button
+              className="btn btn-sm py-1 px-2 border d-flex align-items-center gap-1"
+              style={{ fontSize: "0.8rem", background: "#fff", borderColor: "#D4C9BE" }}
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => p - 1)}
+            >
+              Prev
+            </button>
+
+            <div className="d-none d-sm-flex gap-1 mx-1">
+              {Array.from({ length: Math.ceil(filteredItems.length / itemsPerPage) }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === Math.ceil(filteredItems.length / itemsPerPage) || Math.abs(p - currentPage) <= 1)
+                .map((p, idx, arr) => (
+                  <React.Fragment key={p}>
+                    {idx > 0 && arr[idx - 1] !== p - 1 && <span className="text-muted px-1 small">...</span>}
+                    <button
+                      className={`btn btn-sm py-0 px-2 ${currentPage === p ? "btn-dark" : "btn-light border"}`}
+                      style={{ fontSize: "0.75rem", height: "24px", minWidth: "24px" }}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  </React.Fragment>
+                ))}
+            </div>
+
+            {/* Mobile simplified page indicator */}
+            <div className="d-flex d-sm-none align-items-center px-2 small text-muted" style={{ fontSize: "0.75rem" }}>
+              Page {currentPage} of {Math.max(1, Math.ceil(filteredItems.length / itemsPerPage))}
+            </div>
+
+            <button
+              className="btn btn-sm py-1 px-2 border d-flex align-items-center gap-1"
+              style={{ fontSize: "0.8rem", background: "#fff", borderColor: "#D4C9BE" }}
+              disabled={currentPage >= Math.ceil(filteredItems.length / itemsPerPage)}
+              onClick={() => setCurrentPage((p) => p + 1)}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 
       {/* FULL IMAGE LIGHTBOX */}
       {fullscreenImage && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center" style={{ zIndex: 5000 }} onClick={() => setFullscreenImage(null)} role="dialog" aria-modal="true">
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center"
+          style={{ zIndex: 5000 }}
+          onClick={() => setFullscreenImage(null)}
+          role="dialog"
+          aria-modal="true"
+        >
           <img src={fullscreenImage} alt="full" style={{ maxWidth: "92%", maxHeight: "92%" }} />
         </div>
       )}
@@ -738,24 +1236,57 @@ function GuardItemManagement() {
       {/* CONFIRM MODAL */}
       {confirmOpen && (
         <>
-          <div className="modal-backdrop show" onClick={closeConfirm} style={{ zIndex: 5000 }} />
+          <div
+            className="modal-backdrop show"
+            onClick={closeConfirm}
+            style={{ zIndex: 5000 }}
+          />
           <div className="modal d-block" style={{ zIndex: 6000 }}>
             <div className="modal-dialog modal-sm modal-dialog-centered">
-              <div className="modal-content" style={{ border: "1px solid #D4C9BE" }}>
-                <div className="modal-header">
-                  <h6 className="modal-title">{confirmMode === "verify" ? "Confirm Verification" : confirmMode === "archive" ? "Confirm Archive" : "Confirm Download"}</h6>
-                  <button type="button" className="btn-close" onClick={closeConfirm} />
+              <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "15px" }}>
+                <div className="modal-header border-0 px-4 pt-4">
+                  <h6
+                    className="modal-title fw-bold"
+                    style={{ color: "#123458" }}
+                  >
+                    {confirmMode === "verify"
+                      ? "Confirm Verification"
+                      : confirmMode === "archive"
+                      ? "Confirm Archive"
+                      : "Confirm Download"}
+                  </h6>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={closeConfirm}
+                  />
                 </div>
 
-                <div className="text-muted p-3">
-                  <p>{confirmMode === "verify" ? "Are you sure you want to verify this item?" : confirmMode === "archive" ? "Are you sure you want to archive this item?" : "Do you want to download the PDF report?"}</p>
+                <div className="modal-body px-4 text-muted">
+                  <p>
+                    {confirmMode === "verify"
+                      ? "Are you sure you want to verify this item?"
+                      : confirmMode === "archive"
+                      ? "Are you sure you want to archive this item?"
+                      : "Do you want to download the PDF report?"}
+                  </p>
                 </div>
 
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={closeConfirm}>
+                <div className="modal-footer border-0 px-4 pb-4">
+                  <button
+                    type="button"
+                    className="btn btn-light px-4 flex-grow-1 fw-bold"
+                    onClick={closeConfirm}
+                    style={{ borderRadius: "10px" }}
+                  >
                     No
                   </button>
-                  <button type="button" className="btn" style={{ background: "#123458", color: "#F1EFEC" }} onClick={handleConfirm}>
+                  <button
+                    type="button"
+                    className="btn px-4 flex-grow-1 fw-bold text-white"
+                    style={{ background: "#123458", borderRadius: "10px" }}
+                    onClick={handleConfirm}
+                  >
                     {confirmMode === "archive" ? "Yes, Archive" : "Yes"}
                   </button>
                 </div>
@@ -767,7 +1298,15 @@ function GuardItemManagement() {
 
       {/* TOAST */}
       {toast.show && (
-        <div className="position-fixed bottom-0 end-0 m-3 p-3 rounded shadow text-muted" style={{ background: toast.type === "success" ? "#90EE90" : toast.type === "danger" ? "#F08080" : "#D4C9BE", color: "#030303", minWidth: 250, zIndex: 4000 }} role="status" aria-live="polite">
+        <div
+          className="position-fixed bottom-0 end-0 m-3 p-3 rounded"
+          style={{
+            background: toast.type === "danger" ? "#F08080" : "#90EE90",
+            color: "#030303",
+            minWidth: 240,
+            zIndex: 3000,
+          }}
+        >
           {toast.message}
         </div>
       )}

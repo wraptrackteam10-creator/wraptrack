@@ -29,22 +29,27 @@ const COLORS = {
   muted: "#D4C9BE",
   lightText: "#666666",
   status: {
-    Deposited: "#E8F4F8",
+    Deposited: "#F1F5F9",
     Claimed: "#E8F5E9",
     Unclaimed: "#FFEBEE",
     "Pending Verification": "#FFF3E0",
+    Settled: "#E8F4F8",
   },
+
   statusBorder: {
-    Deposited: "#80DEEA",
+    Deposited: "#94A3B8",
     Claimed: "#66BB6A",
     Unclaimed: "#EF5350",
     "Pending Verification": "#FFA726",
+    Settled: "#80DEEA",
   },
+
   statusText: {
-    Deposited: "#00838F",
+    Deposited: "#475569",
     Claimed: "#2E7D32",
     Unclaimed: "#C62828",
     "Pending Verification": "#E65100",
+    Settled: "#00838F",
   },
 };
 
@@ -54,6 +59,7 @@ function UserHomePage() {
   const [loading, setLoading] = useState(true);
   const [expandedItemId, setExpandedItemId] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [hoveredTooltip, setHoveredTooltip] = useState(null);
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -61,6 +67,7 @@ function UserHomePage() {
 
   const user = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user")) : null;
   const cardsRef = useRef({});
+  const tooltipRef = useRef(null);
 
   const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
@@ -117,17 +124,26 @@ function UserHomePage() {
   }, [user?.id, API_BASE_URL]);
 
   const getPenaltyInfo = (status, createdAt, penalty) => {
+    // ✅ ADD THIS: Handle Settled status
+    if (status === "Settled") {
+      return {
+        text: "₱0 (Resolved)",
+        color: "#66BB6A", // Green to show it's resolved
+        // icon: "✅",
+      };
+    }
+
     if (status === "Unclaimed" || status === "Penalized") {
       return {
-        text: `Penalized ${penalty ?? 0}x`,
+        text: `₱${penalty ?? 0}`,
         color: "#EF5350",
-        icon: "⚠️",
+        // icon: "⚠️",
       };
     } else if (status === "Pending Verification") {
       return {
         text: "Awaiting Verification",
         color: "#FFA726",
-        icon: "⏳",
+        // icon: "⏳",
       };
     }
 
@@ -210,6 +226,56 @@ function UserHomePage() {
       return iso;
     }
   };
+
+  const PenaltyTooltip = ({ tooltipId }) => (
+    <div
+      ref={tooltipRef}
+      style={{
+        position: "fixed",
+        background: "#123458",
+        color: "#fff",
+        padding: "12px 16px",
+        borderRadius: "8px",
+        fontSize: "13px",
+        zIndex: 10000,
+        maxWidth: "280px",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+        lineHeight: "1.6",
+        pointerEvents: "auto",
+        animation: "tooltipFadeIn 0.2s ease-out",
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: "8px" }}>How Penalties Work:</div>
+      <ul style={{ margin: "0 0 8px 0", paddingLeft: "16px" }}>
+        <li>Penalty applies to <strong>unclaimed items</strong></li>
+        <li>Penalty increases <strong>₱1 per day</strong></li>
+        <li>Can be resolved as <strong>sanctioned</strong></li>
+      </ul>
+      <NavLink 
+        to="/info/penalties" 
+        style={{ 
+          color: "#90EE90", 
+          textDecoration: "underline", 
+          fontSize: "12px",
+          fontWeight: 500
+        }}
+        className="text-decoration-none"
+      >
+        Learn more →
+      </NavLink>
+      <div
+        style={{
+          position: "absolute",
+          width: "8px",
+          height: "8px",
+          background: "#123458",
+          transform: "rotate(45deg)",
+          bottom: "-4px",
+          left: "16px",
+        }}
+      />
+    </div>
+  );
 
   return (
     <div style={{ background: COLORS.appBg, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -422,8 +488,48 @@ function UserHomePage() {
                         <th style={{ padding: "14px 16px", fontWeight: 700, fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.5px", width: "150px", textAlign: "center" }}>
                           Status
                         </th>
-                        <th style={{ padding: "14px 16px", fontWeight: 700, fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.5px", width: "180px", textAlign: "center" }}>
-                          Penalty
+                        <th style={{ padding: "14px 16px", fontWeight: 700, fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.5px", width: "200px", textAlign: "center", position: "relative" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                            Penalty
+                            <div
+                              style={{
+                                position: "relative",
+                                display: "inline-flex",
+                                alignItems: "center",
+                              }}
+                              onMouseEnter={() => setHoveredTooltip("header-penalty")}
+                              onMouseLeave={() => setHoveredTooltip(null)}
+                            >
+                              <button
+                                style={{
+                                  background: "transparent",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "#0099CC",
+                                  fontSize: "16px",
+                                  padding: "0px 2px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  transition: "transform 0.2s ease",
+                                  lineHeight: 1,
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = "scale(1.15)";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = "scale(1)";
+                                }}
+                                aria-label="Penalty information"
+                              >
+                                <i className="bi bi-info-circle" style={{ fontSize: "14px", lineHeight: 1 }} />
+                              </button>
+                              
+                              {hoveredTooltip === "header-penalty" && (
+                                <PenaltyTooltip tooltipId="header-penalty" />
+                              )}
+                            </div>
+                          </div>
                         </th>
                         <th style={{ padding: "14px 16px", fontWeight: 700, fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.5px", width: "80px", textAlign: "center" }}>
                           Actions
@@ -517,7 +623,7 @@ function UserHomePage() {
                                 minWidth: "100px",
                               }}
                             >
-                              {item.status === "Pending Verification" ? "⏳ Pending" : item.status}
+                              {item.status === "Pending Verification" ? "Pending" : item.status}
                             </span>
                           </td>
 
@@ -710,7 +816,7 @@ function UserHomePage() {
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {item.status === "Pending Verification" ? "⏳ Pending" : item.status}
+                              {item.status === "Pending Verification" ? "Pending" : item.status}
                             </span>
 
                             {/* Action Buttons */}
@@ -779,20 +885,76 @@ function UserHomePage() {
                           <p style={{ margin: "0 0 10px 0", color: COLORS.text, fontSize: "13px", fontWeight: 500 }}>
                             <strong>Owner:</strong> {item.userId?.firstname || user?.firstname} {item.userId?.lastname || user?.lastname}
                           </p>
-                          <p
-                            style={{
-                              margin: "0",
-                              color: penaltyInfo.color,
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "6px",
-                            }}
-                          >
-                            <span>{penaltyInfo.icon}</span>
-                            <span>{penaltyInfo.text}</span>
-                          </p>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                            <p
+                              style={{
+                                margin: 0,
+                                color: penaltyInfo.color,
+                                fontSize: "13px",
+                                fontWeight: 500,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                            >
+                              <span>{penaltyInfo.icon}</span>
+                              <span>{penaltyInfo.text}</span>
+                            </p>
+                            <button
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                cursor: "pointer",
+                                color: "#0099CC",
+                                fontSize: "14px",
+                                padding: "0px 4px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                lineHeight: 1,
+                              }}
+                              onClick={() => {
+                                setHoveredTooltip(hoveredTooltip === `penalty-${item._id}` ? null : `penalty-${item._id}`);
+                              }}
+                            >
+                              <i className="bi bi-info-circle" style={{ fontSize: "14px", lineHeight: 1 }} />
+                            </button>
+                            {hoveredTooltip === `penalty-${item._id}` && (
+                              <div style={{ width: "100%", marginTop: "8px" }}>
+                                <div
+                                  style={{
+                                    background: "#123458",
+                                    color: "#fff",
+                                    padding: "12px 16px",
+                                    borderRadius: "8px",
+                                    fontSize: "13px",
+                                    boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+                                    lineHeight: "1.6",
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 600, marginBottom: "8px" }}>How Penalties Work:</div>
+                                  <ul style={{ margin: "0 0 8px 0", paddingLeft: "16px", fontSize: "12px" }}>
+                                    <li>Penalty applies to <strong>unclaimed items</strong></li>
+                                    <li>Penalty increases <strong>₱1 per day</strong></li>
+                                    <li>Can be resolved as <strong>sanctioned</strong></li>
+                                  </ul>
+                                  <NavLink 
+                                    to="/info/penalties" 
+                                    style={{ 
+                                      color: "#90EE90", 
+                                      textDecoration: "underline", 
+                                      fontSize: "12px",
+                                      fontWeight: 500,
+                                      display: "inline-block",
+                                    }}
+                                    className="text-decoration-none"
+                                  >
+                                    Learn more →
+                                  </NavLink>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -965,6 +1127,17 @@ function UserHomePage() {
           from {
             opacity: 0;
             transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes tooltipFadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
           }
           to {
             opacity: 1;

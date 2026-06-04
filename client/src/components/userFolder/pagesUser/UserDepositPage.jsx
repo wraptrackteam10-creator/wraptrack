@@ -32,10 +32,10 @@ const COLORS = {
 };
 
 const DETECTION_STAGES = [
-  { step: 1, icon: "📸", label: "Scanning image", duration: 800 },
-  { step: 2, icon: "🔍", label: "Analyzing objects", duration: 800 },
-  { step: 3, icon: "⚙️", label: "Processing with YOLO", duration: 800 },
-  { step: 4, icon: "✓", label: "Classification complete", duration: 600 },
+  { step: 1, icon: "📸", label: "Scanning image", duration: 1000 },
+  { step: 2, icon: "🔍", label: "Analyzing objects", duration: 1000 },
+  { step: 3, icon: "⚙️", label: "Processing with YOLO", duration: 1000 },
+  { step: 4, icon: "✓", label: "Finalizing classification", duration: 1000 },
 ];
 
 function UserDepositPage() {
@@ -252,7 +252,7 @@ function UserDepositPage() {
       setCurrentStage(0);
       setDescription("");
 
-      const res = await fetch("http://10.0.1.119:5000/predict", {
+      const res = await fetch("http://172.10.45.78:5000/predict", {
         method: "POST",
         body: formData,
       });
@@ -347,7 +347,7 @@ function UserDepositPage() {
       setIsDetecting(true);
       setCurrentStage(0);
 
-      const res = await fetch("http://10.0.1.119:5000/predict", {
+      const res = await fetch("http://172.10.45.78:5000/predict", {
         method: "POST",
         body: formData,
       });
@@ -372,7 +372,7 @@ function UserDepositPage() {
 
         setDescription(formatted);
         setDetectionError(null);
-        showToast("✅ Detection successful!", "success");
+        showToast("Detection successful!", "success");
       } else {
         setDescription("Unknown Item");
         setDetectionError("unknown");
@@ -413,7 +413,7 @@ function UserDepositPage() {
 
       const data = await res.json();
       if (res.ok) {
-        showToast("✅ Item deposited successfully!", "success");
+        showToast("Item deposited successfully!", "success");
         setTimeout(() => {
           setImage(null);
           setFile(null);

@@ -5,7 +5,7 @@ const authorizeRoles = require("../middleware/roleMiddleware");
 
 const {
   uploadItem, getItems, getItemPhoto, updateItemAction, unarchiveItem,
-  updateItemStatus, getItemSummary, updateItem, deleteItem,
+  updateItemStatus, getItemSummary, updateItem, deleteItem, getLogsByUser,
 } = require("../controllers/itemController");
 
 const router = express.Router();
@@ -21,6 +21,8 @@ router.get("/items", authMiddleware, authorizeRoles("user", "guard", "admin"), g
 router.get("/items/:id/photo", authMiddleware, authorizeRoles("user", "guard", "admin"), getItemPhoto);
 router.patch("/items/:id/action", authMiddleware, authorizeRoles("user", "guard", "admin"), updateItemAction);
 router.patch("/items/:id/unarchive", authMiddleware, authorizeRoles("user", "guard", "admin"), unarchiveItem);
+router.get("/logs/:userId", authMiddleware, authorizeRoles("user", "guard", "admin"), getLogsByUser);
+
 
 // ------------------- Guard Routes -------------------
 // Only guards and admins can update actions/status

@@ -11,8 +11,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://192.168.1.43:3000",
-        "http://10.0.1.119:3000",
+        "http://192.168.1.42:3000",
+        "http://172.10.45.78:3000",
+        "http://172.28.131.221:3000",
         "https://wraptrack.vercel.app"
     ],
     allow_credentials=True,

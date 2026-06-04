@@ -22,6 +22,13 @@ import GuardHomePage from "./components/guardFolder/pagesGuard/GuardHomePage";
 import GuardItemManagement from "./components/guardFolder/pagesGuard/GuardItemManagement";
 import GuardHistoryLog from "./components/guardFolder/pagesGuard/GuardHistoryLog";
 
+// Info Pages
+import InfoHub from "./systemPages/info/InfoHub";
+import PenaltiesInfo from "./systemPages/info/PenaltiesInfo";
+import PrivacyInfo from "./systemPages/info/PrivacyPolicy";
+import TermsOfService from "./systemPages/info/TermsOfService";
+import FAQ from "./systemPages/info/FAQ";
+
 // import { SettingsProvider } from "./context/SettingsContext";
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -121,6 +128,13 @@ function App() {
           <Route path="item-management" element={<GuardItemManagement />} />
           <Route path="history-log" element={<GuardHistoryLog />} />
         </Route>
+
+        {/* Info Pages - Accessible from anywhere */}
+        <Route path="/info" element={<InfoHub />} />
+        <Route path="/info/penalties" element={<PenaltiesInfo />} />
+        <Route path="/info/privacy" element={<PrivacyInfo />} />
+        <Route path="/info/terms" element={<TermsOfService />} />
+        <Route path="/info/faq" element={<FAQ />} />
       </Routes>
     </BrowserRouter>
     </>

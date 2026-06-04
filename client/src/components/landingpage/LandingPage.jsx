@@ -122,6 +122,8 @@ function LandingPage() {
     backgroundSize: "cover",
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
+    display: "flex",
+    flexDirection: "column",
   }}>
 
       {/* ---------------- HEADER ---------------- */}
@@ -240,34 +242,71 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* ---------------- FOOTER ---------------- */}
-      <footer className="px-4 py-4" style={{ backgroundColor: "#123458", color: "#F1EFEC" }}>
-        <div className="container d-flex flex-column justify-content-center text-start gap-1">
-          <p className="fw-semibold m-0">WraPTrack</p>
-          <p className="m-0 d-flex align-items-center gap-2">
-            <FaUniversity size={14} />
-            Davao Oriental State University
-          </p>
-          <p className="m-0">© 2025</p>
-          {/* <p className="m-0">Rembrant Gumbason, Cristine Catambac, Nouf Masagnay</p> */}
+      {/* Flexible spacer to push footer to bottom */}
+      <div style={{ flex: 1 }} />
 
-          <div className="mt-2 d-flex flex-column gap-1 align-items-start">
-            <p className="m-0 d-flex align-items-center gap-2">
-              <MdEmail size={16} /> wraptrackteam1.0@gmail.com
-            </p>
-            <p className="m-0 d-flex align-items-center gap-2">
-              <MdPhone size={16} /> 0948 508 3516
-            </p>
+      {/* ---------------- FOOTER ---------------- */}
+      <footer className="px-3 px-md-4 py-5" style={{ backgroundColor: "#123458", color: "#F1EFEC" }}>
+        <div className="container-fluid">
+          <div className="row">
+            {/* Company Info Section */}
+            <div className="col-12 col-md-4 mb-4 mb-md-0">
+              <p className="fw-semibold mb-2" style={{ fontSize: "16px" }}>WraPTrack</p>
+              <p className="m-0 d-flex align-items-center gap-2 mb-2" style={{ fontSize: "14px" }}>
+                <FaUniversity size={14} />
+                Davao Oriental State University
+              </p>
+              <p className="m-0" style={{ fontSize: "13px", opacity: 0.8 }}>© 2025</p>
+            </div>
+
+            {/* Contact Section */}
+            <div className="col-12 col-md-4 mb-4 mb-md-0">
+              <p className="fw-semibold mb-2" style={{ fontSize: "16px" }}>Contact Us</p>
+              <p className="m-0 d-flex align-items-center gap-2 mb-2" style={{ fontSize: "14px" }}>
+                <MdEmail size={16} />
+                <a href="mailto:wraptrackteam1.0@gmail.com" style={{ color: "#F1EFEC", textDecoration: "none" }}>
+                  wraptrackteam1.0@gmail.com
+                </a>
+              </p>
+              <p className="m-0 d-flex align-items-center gap-2" style={{ fontSize: "14px" }}>
+                <MdPhone size={16} />
+                <a href="tel:+639485083516" style={{ color: "#F1EFEC", textDecoration: "none" }}>
+                  0948 508 3516
+                </a>
+              </p>
+            </div>
+
+            {/* Legal Links Section */}
+            <div className="col-12 col-md-4">
+              <p className="fw-semibold mb-2" style={{ fontSize: "16px" }}>Resources</p>
+              <div className="d-flex flex-column gap-2">
+                <NavLink to="/info" className="text-light text-decoration-none" style={{ fontSize: "14px", transition: "opacity 0.2s" }} onMouseEnter={(e) => e.target.style.opacity = "0.8"} onMouseLeave={(e) => e.target.style.opacity = "1"}>
+                  <i className="bi bi-question-circle me-2"></i> Help & Information
+                </NavLink>
+                <NavLink to="/info/terms" className="text-light text-decoration-none" style={{ fontSize: "14px", transition: "opacity 0.2s" }} onMouseEnter={(e) => e.target.style.opacity = "0.8"} onMouseLeave={(e) => e.target.style.opacity = "1"}>
+                  <i className="bi bi-file-text me-2"></i> Terms of Service
+                </NavLink>
+                <NavLink to="/info/privacy" className="text-light text-decoration-none" style={{ fontSize: "14px", transition: "opacity 0.2s" }} onMouseEnter={(e) => e.target.style.opacity = "0.8"} onMouseLeave={(e) => e.target.style.opacity = "1"}>
+                  <i className="bi bi-shield-lock me-2"></i> Privacy Policy
+                </NavLink>
+                <NavLink to="/info/faq" className="text-light text-decoration-none" style={{ fontSize: "14px", transition: "opacity 0.2s" }} onMouseEnter={(e) => e.target.style.opacity = "0.8"} onMouseLeave={(e) => e.target.style.opacity = "1"}>
+                  <i className="bi bi-chat-dots me-2"></i> FAQ
+                </NavLink>
+              </div>
+            </div>
           </div>
 
-          {/* <div className="mt-3 d-flex gap-3 flex-wrap justify-content-center justify-content-md-start">
-            <a href="/About" className="text-light text-decoration-none">About</a>
-            <a href="/Privacy" className="text-light text-decoration-none">Privacy Policy</a>
-          </div> */}
+          {/* Divider */}
+          <hr style={{ borderColor: "rgba(255, 255, 255, 0.1)", margin: "24px 0" }} />
 
-          <p className="mt-3 mb-0 text-start" style={{ fontSize: "0.85rem", opacity: 0.8 }}>
-            Progressive Web Application • Installable on supported devices
-          </p>
+          {/* Bottom Info */}
+          <div className="row">
+            <div className="col-12">
+              <p className="m-0 text-center" style={{ fontSize: "13px", opacity: 0.75 }}>
+                Progressive Web Application • Installable on supported devices
+              </p>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

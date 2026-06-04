@@ -2,6 +2,7 @@ import logo from "../../images/wtlogofinal.png";
 import { FaBell, FaBars, FaTrash } from "react-icons/fa";
 import { CiLogout } from "react-icons/ci";
 import { BsJournalText } from "react-icons/bs";
+import { MdOutlineInfo } from "react-icons/md";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "./usercss/navbar.css";
@@ -303,17 +304,28 @@ function NavBarU() {
               >
                 <ul className="list-unstyled m-0 p-2">
                   <li
-                    className="p-2 border-bottom small dropdown-item-clickable"
-                    style={{ color: COLORS.text }}
+                    className="p-2 border-bottom small dropdown-item-clickable d-flex align-items-center gap-2"
+                    style={{ color: COLORS.text, cursor: "pointer" }}
                     onClick={() => {
                       navigate("/user/history");
                       setShowMenu(false);
                     }}
                   >
-                    <BsJournalText size={18} />  History Log
+                    <BsJournalText size={18} /> History Log
                   </li>
                   <li
-                    className="p-2 small text-danger dropdown-item-clickable"
+                    className="p-2 border-bottom small dropdown-item-clickable d-flex align-items-center gap-2"
+                    style={{ color: COLORS.text, cursor: "pointer" }}
+                    onClick={() => {
+                      navigate("/info");
+                      setShowMenu(false);
+                    }}
+                  >
+                    <MdOutlineInfo size={18} /> Help & Info
+                  </li>
+                  <li
+                    className="p-2 small dropdown-item-clickable d-flex align-items-center gap-2 text-danger"
+                    style={{ cursor: "pointer" }}
                     onClick={() => {
                       handleLogout();
                     }}

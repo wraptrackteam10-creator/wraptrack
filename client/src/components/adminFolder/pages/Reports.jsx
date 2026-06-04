@@ -112,11 +112,18 @@ function Reports() {
       </div>
     );
 
-  // --- SUMMARY METRICS using timestamps ---
-  const depositedCount = items.filter((i) => i.depositedAt).length;
-  const claimedCount = items.filter((i) => i.claimedAt).length;
-  const unclaimedCount = items.filter((i) => i.unclaimedAt).length;
-  const penalizedCount = items.filter((i) => i.penalty && i.penalty > 0).length;
+  // ✅ FILTER ITEMS BY SELECTED YEAR
+  const itemsInYear = items.filter((i) => {
+    const checkDate = i.depositedAt || i.claimedAt || i.unclaimedAt || i.createdAt;
+    if (!checkDate) return false;
+    return new Date(checkDate).getFullYear() === selectedYear;
+  });
+
+  // --- SUMMARY METRICS using timestamps (filtered by year) ---
+  const depositedCount = itemsInYear.filter((i) => i.depositedAt).length;
+  const claimedCount = itemsInYear.filter((i) => i.claimedAt).length;
+  const unclaimedCount = itemsInYear.filter((i) => i.unclaimedAt).length;
+  const penalizedCount = itemsInYear.filter((i) => i.penalty && i.penalty > 0).length;
   const totalUsers = users.filter((u) => {
     const type = u.userCredentials?.type;
     return type !== "admin" && type !== "guard";
@@ -127,7 +134,7 @@ function Reports() {
   });
 
   // Average claim time in hours (only for items that have both depositedAt and claimedAt)
-  const claimedItems = items.filter((i) => i.depositedAt && i.claimedAt);
+  const claimedItems = itemsInYear.filter((i) => i.depositedAt && i.claimedAt);
   const totalClaimTime = claimedItems.reduce((sum, item) => {
     const depositedTime = new Date(item.depositedAt).getTime();
     const claimedTime = new Date(item.claimedAt).getTime();
@@ -148,23 +155,28 @@ function Reports() {
 
   const years = [2024, 2025, 2026]; // Available years for filtering
 
-  // Pie chart
+  // ✅ MODIFIED PIE CHART - Using status field for mutually exclusive categories
+  // Claimed: items with status === "Claimed"
+  // Unclaimed: items with status === "Unclaimed"
+  // Settled: items with status === "Settled"
+  const claimedCountPie = itemsInYear.filter((i) => i.status === "Claimed").length;
+  const unclaimedCountPie = itemsInYear.filter((i) => i.status === "Unclaimed").length;
+  const settledCount = itemsInYear.filter((i) => i.status === "Settled").length;
+
   const pieData = [
-    { name: "Claimed", value: claimedCount },
-    { name: "Unclaimed", value: unclaimedCount },
-    { name: "Penalized", value: penalizedCount },
+    { name: "Claimed", value: claimedCountPie },
+    { name: "Unclaimed", value: unclaimedCountPie },
+    { name: "Settled", value: settledCount },
   ];
-  const COLORS = ["#90EE90", "#F08080", "#FFA500"]; // Added color for penalized
+  const COLORS = ["#90EE90", "#F08080", "#17a2b8"];
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  // We use selectedYear instead of a hardcoded currentYear
 
   // --- Monthly Line Chart ---
   const monthlyDataLine = monthNames.map((month, i) => {
-    const monthItems = items.filter(
+    const monthItems = itemsInYear.filter(
       (it) =>
         it.action === "Deposited" &&
-        new Date(it.createdAt).getFullYear() === selectedYear &&
         new Date(it.createdAt).getMonth() === i
     );
     const classCounts = {};
@@ -192,7 +204,7 @@ function Reports() {
       unclaimedMap[c] = 0;
     });
 
-    items.forEach((it) => {
+    itemsInYear.forEach((it) => {
       if (!it.description) return;
       classNames.forEach((cls) => {
         const escaped = escapeRegExp(cls);
@@ -203,19 +215,19 @@ function Reports() {
 
         if (it.depositedAt) {
           const d = new Date(it.depositedAt);
-          if (d.getFullYear() === selectedYear && d.getMonth() === i) {
+          if (d.getMonth() === i) {
             depositedMap[cls] += qty;
           }
         }
         if (it.claimedAt) {
           const d = new Date(it.claimedAt);
-          if (d.getFullYear() === selectedYear && d.getMonth() === i) {
+          if (d.getMonth() === i) {
             claimedMap[cls] += qty;
           }
         }
         if (it.unclaimedAt) {
           const d = new Date(it.unclaimedAt);
-          if (d.getFullYear() === selectedYear && d.getMonth() === i) {
+          if (d.getMonth() === i) {
             unclaimedMap[cls] += qty;
           }
         }
@@ -249,22 +261,22 @@ function Reports() {
     let claimed = 0;
     let unclaimed = 0;
 
-    items.forEach((it) => {
+    itemsInYear.forEach((it) => {
       if (it.depositedAt) {
         const d = new Date(it.depositedAt);
-        if (d.getFullYear() === selectedYear && d >= startWeek && d <= endWeek) deposited += 1;
+        if (d >= startWeek && d <= endWeek) deposited += 1;
       }
       if (it.claimedAt) {
         const d = new Date(it.claimedAt);
-        if (d.getFullYear() === selectedYear && d >= startWeek && d <= endWeek) claimed += 1;
+        if (d >= startWeek && d <= endWeek) claimed += 1;
       }
       if (it.unclaimedAt) {
         const d = new Date(it.unclaimedAt);
-        if (d.getFullYear() === selectedYear && d >= startWeek && d <= endWeek) unclaimed += 1;
+        if (d >= startWeek && d <= endWeek) unclaimed += 1;
       }
     });
 
-    const label = `W${w + 1} (${startWeek.toISOString().slice(5, 10)}-${endWeek.toISOString().slice(5, 10)})`;
+    const label = `W${w + 1}`;
     weeklyDataBar.push({
       week: label,
       deposited,
@@ -277,18 +289,18 @@ function Reports() {
 
   // --- Interpreters ---
   const pieInterpreter = () => {
-    const total = claimedCount + unclaimedCount + penalizedCount;
-    if (total === 0) return "No data available.";
-    const unclaimedPercent = ((unclaimedCount / total) * 100).toFixed(0);
-    return `About ${unclaimedPercent}% of deposited items remain unclaimed. This suggests follow-up or notification improvements may help reunite owners with their items.`;
+    const total = claimedCountPie + unclaimedCountPie + settledCount;
+    if (total === 0) return `No data available for ${selectedYear}.`;
+    const unclaimedPercent = ((unclaimedCountPie / total) * 100).toFixed(0);
+    const settledPercent = ((settledCount / total) * 100).toFixed(0);
+    return `About ${unclaimedPercent}% of items remain unclaimed and ${settledPercent}% have been settled. This suggests follow-up or notification improvements may help reunite owners with their items.`;
   };
 
   const monthlyBarInterpreter = () => {
     const totalDeposits = {};
     classNames.forEach((c) => (totalDeposits[c] = 0));
-    items.forEach((it) => {
+    itemsInYear.forEach((it) => {
       if (!it.description || !it.depositedAt) return;
-      if (new Date(it.depositedAt).getFullYear() !== selectedYear) return;
       classNames.forEach((cls) => {
         const escaped = escapeRegExp(cls);
         const regex = new RegExp(`${escaped}s?\\s*\\(\\s*(?:x\\s*)?(\\d+)(?:\\s*x)?\\s*\\)`, "i");
@@ -319,8 +331,8 @@ function Reports() {
   const lineChartInterpreter = () => {
     const totalPerClass = {};
     classNames.forEach((c) => (totalPerClass[c] = 0));
-    items
-      .filter((it) => it.depositedAt && new Date(it.depositedAt).getFullYear() === selectedYear)
+    itemsInYear
+      .filter((it) => it.depositedAt)
       .forEach((it) => {
         if (!it.description) return;
         classNames.forEach((cls) => {
@@ -361,7 +373,7 @@ function Reports() {
           useCORS: true,
           logging: false,
           scrollY: -window.scrollY,
-          windowWidth: 1200, // Ensure wide layout for capture
+          windowWidth: 1200,
           windowHeight: element.scrollHeight
         });
         const imgData = canvas.toDataURL("image/png");
@@ -369,7 +381,6 @@ function Reports() {
         let pdfWidth = usableWidth;
         let pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
         
-        // Center the image horizontally
         const xOffset = margin + (usableWidth - pdfWidth) / 2;
         
         let heightLeft = pdfHeight;
@@ -391,18 +402,17 @@ function Reports() {
 
         y = position - shift + pdfHeight + 8;
       } catch (err) {
-        // ignore chart capture errors but continue
         console.warn("Failed to render charts to image:", err);
       }
     }
 
-    // Narrative section (human-readable insights)
+    // Narrative section
     const narratives = [
       {
         title: "Executive Summary",
         text: `This report summarizes item deposit and claim activity for ${selectedYear}. In total there are ${summary.totalDeposited} deposited records and ${summary.totalClaimed} successful claims. ${summary.unclaimed} items remain unclaimed and ${summary.penalized} items received penalties. The system has ${summary.totalUsers} users (${summary.activeUsers} active). Average time to claim an item is ${summary.avgClaimTime} hours.`,
       },
-      { title: "Claimed vs Unclaimed", text: pieInterpreter() },
+      { title: "Claimed vs Unclaimed vs Settled", text: pieInterpreter() },
       { title: "Monthly Top Items", text: monthlyBarInterpreter() },
       { title: "Weekly Activity Highlight", text: weeklyBarInterpreter() },
       { title: "Monthly Deposit Trend", text: lineChartInterpreter() },
@@ -455,7 +465,7 @@ function Reports() {
       ["Total Users", "All users excluding admin and guards.", summary.totalUsers],
       ["Active Users", "Users who are currently active in the system.", summary.activeUsers],
       ["Average Claim Time (hrs)", "Average time between depositing and claiming an item.", summary.avgClaimTime],
-      ["Claimed vs Unclaimed Pie Chart", "Shows proportion of claimed, unclaimed, and penalized items.", pieInterpreter()],
+      ["Claimed vs Unclaimed vs Settled Pie Chart", "Shows proportion of claimed, unclaimed, and settled items.", pieInterpreter()],
       ["Monthly Top Items Bar Chart", "Shows which items are most deposited, claimed, or unclaimed each month.", monthlyBarInterpreter()],
       ["Weekly Deposited/Claimed/Unclaimed Chart", "Shows weekly activity trends across the year.", weeklyBarInterpreter()],
       ["Monthly Deposited Trend Line Chart", "Displays trends of item deposits per class each month.", lineChartInterpreter()],
@@ -473,20 +483,17 @@ function Reports() {
         1: { cellWidth: 70 },
         2: { cellWidth: usableWidth - 45 - 70 },
       },
-      didDrawPage: (data) => {
-        // nothing extra
-      },
     });
 
     pdf.save(`Item_Report_${selectedYear}.pdf`);
   };
 
-  // Chart heights adjusted to screen size for improved mobile UX
+  // Chart heights adjusted to screen size
   const smallChartHeight = isMobile ? 180 : 250;
   const mediumChartHeight = isMobile ? 220 : 300;
-  const lineChartHeight = isMobile ? 220 : 300;
-  const weeklyTickInterval = isMobile ? 6 : "preserveStartEnd";
-  const monthTickAngle = isMobile ? -30 : 0;
+  const lineChartHeight = isMobile ? 280 : 350;
+  const weeklyTickInterval = isMobile ? 5 : 3;
+  const monthTickAngle = isMobile ? -45 : 0;
 
   return (
     <div className="container-fluid p-3 p-md-4" style={{ background: "#f8fafc", minHeight: "100vh" }}>
@@ -646,22 +653,33 @@ function Reports() {
         {/* WEEKLY TRENDS */}
         <div className="row g-4 mb-4">
           <div className="col-12">
-            <div className="card border-0 shadow-sm rounded-4 p-4" style={{ background: "#fff" }}>
+            <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4" style={{ background: "#fff", overflowX: "auto" }}>
               <h6 className="fw-bold text-dark mb-4 d-flex align-items-center gap-2">
                 <FaChartBar className="text-info" /> Weekly Performance Tracking
               </h6>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={weeklyDataBar}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="week" interval={weeklyTickInterval} axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                  <Legend verticalAlign="top" align="right" />
-                  <Bar dataKey="deposited" fill="#1e293b" name="Deposited" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="claimed" fill="#10b981" name="Claimed" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="unclaimed" fill="#ef4444" name="Unclaimed" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ overflowX: "auto", minHeight: "400px" }}>
+                <ResponsiveContainer width={isMobile ? 1200 : "100%"} height={380}>
+                  <BarChart data={weeklyDataBar} margin={{ top: 10, right: 20, left: -10, bottom: isMobile ? 60 : 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="week" 
+                      interval={weeklyTickInterval} 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      angle={isMobile ? -45 : 0}
+                      textAnchor={isMobile ? "end" : "middle"}
+                      height={isMobile ? 80 : 40}
+                    />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                    <Legend verticalAlign="top" align="right" />
+                    <Bar dataKey="deposited" fill="#1e293b" name="Deposited" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="claimed" fill="#10b981" name="Claimed" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="unclaimed" fill="#ef4444" name="Unclaimed" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
               <div className="mt-4 p-3 rounded-3 bg-light border-start border-4 border-info">
                 <p className="small text-muted mb-0"><span className="fw-bold text-dark">Insight:</span> {weeklyBarInterpreter()}</p>
               </div>
@@ -672,31 +690,33 @@ function Reports() {
         {/* CATEGORY TRENDS */}
         <div className="row g-4">
           <div className="col-12">
-            <div className="card border-0 shadow-sm rounded-4 p-4" style={{ background: "#fff" }}>
+            <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4" style={{ background: "#fff", overflowX: "auto" }}>
               <h6 className="fw-bold text-dark mb-4 d-flex align-items-center gap-2">
                 <FaChartLine className="text-danger" /> Category Wise Deposit Trends
               </h6>
-              <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={monthlyDataLine}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                  <Legend verticalAlign="top" iconType="line" />
-                  {classNames.map((className, idx) => (
-                    <Line
-                      key={idx}
-                      type="monotone"
-                      dataKey={className}
-                      stroke={lineColors[idx]}
-                      strokeWidth={2}
-                      dot={{ r: 4, fill: lineColors[idx], strokeWidth: 2, stroke: '#fff' }}
-                      activeDot={{ r: 6, strokeWidth: 0 }}
-                      name={className}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{ overflowX: "auto", minHeight: "400px" }}>
+                <ResponsiveContainer width={isMobile ? 1000 : "100%"} height={lineChartHeight}>
+                  <LineChart data={monthlyDataLine} margin={{ top: 10, right: 30, left: -10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                    <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: "20px" }} iconType="line" />
+                    {classNames.map((className, idx) => (
+                      <Line
+                        key={idx}
+                        type="monotone"
+                        dataKey={className}
+                        stroke={lineColors[idx]}
+                        strokeWidth={2}
+                        dot={{ r: 4, fill: lineColors[idx], strokeWidth: 2, stroke: '#fff' }}
+                        activeDot={{ r: 6, strokeWidth: 0 }}
+                        name={className}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
               <div className="mt-4 p-3 rounded-3 bg-light border-start border-4 border-danger">
                 <p className="small text-muted mb-0"><span className="fw-bold text-dark">Insight:</span> {lineChartInterpreter()}</p>
               </div>

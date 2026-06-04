@@ -16,7 +16,7 @@ const router = express.Router();
 // User routes
 router.get("/users", authMiddleware, authorizeRoles("guard", "admin"), getUsers);
 router.post("/users", authMiddleware, authorizeRoles("admin"), createUser);
-router.get("/users/:id", getUserById);
+router.get("/users/:id", authMiddleware, authorizeRoles("user", "guard", "admin"), getUserById);
 router.patch("/users/:id/archive", authMiddleware, authorizeRoles("guard", "admin"), archiveUser);
 router.patch("/users/:id/unarchive", authMiddleware, authorizeRoles("guard", "admin"), unarchiveUser);
 router.put("/users/:id", authMiddleware, authorizeRoles("admin"), updateUser);    // <-- REQUIRED

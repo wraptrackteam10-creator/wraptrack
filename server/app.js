@@ -23,7 +23,7 @@ connectDB();
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:3000", "http://10.0.1.119:3000", "https://wraptrack.vercel.app"], // or your frontend URL
+  origin: ["http://localhost:3000", "http://172.10.45.78:3000", "https://wraptrack.vercel.app"], // or your frontend URL
   credentials: true,                                             // 🔥 REQUIRED for cookies
 })); 
 app.use(cookieParser());
@@ -35,8 +35,8 @@ app.use("/api", authRoutes);
 const itemRoutes = require("./routes/itemRoutes");
 app.use("/api", itemRoutes);
 
-const logRoutes = require("./routes/logRoutes");
-app.use("/api", logRoutes);
+const auditLogRoutes = require("./routes/auditLogRoutes");
+app.use("/api", auditLogRoutes);
 
 const userRoutes = require("./routes/userRoutes");
 app.use("/api", userRoutes);

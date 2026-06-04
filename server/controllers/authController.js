@@ -1,5 +1,6 @@
 const User = require("../models/userModel");
 const TempSignup = require("../models/tempSignupModel");
+const AuditLog = require("../models/auditLogModel");
 const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
@@ -45,6 +46,13 @@ const signup = async (req, res) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email))
     return res.status(400).json({ errorMessage: "Invalid email format!" });
+
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({
+      errorMessage: "Password must contain at least 8 characters, including uppercase, lowercase, numbers, and special characters."
+    });
+  }
 
   try {
     const isEmailValid = await verifyEmailWithAbstract(email);
@@ -264,6 +272,22 @@ const login = async (req, res) => {
       maxAge: 15 * 60 * 1000, // 15 min
     });
 
+    // ✅ Audit log for LOGIN
+    try {
+      await AuditLog.create({
+        userId: user._id,
+        username: user.userCredentials.username,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        action: "LOGIN",
+        details: `User "${user.userCredentials.username}" logged in successfully.`,
+        ipAddress: req.ip || req.connection?.remoteAddress || "",
+        userAgent: req.headers["user-agent"] || "",
+      });
+    } catch (auditErr) {
+      console.error("Audit log (LOGIN) failed:", auditErr.message);
+    }
+
     return res.status(200).json({
       message: "Login successful",
       user: {
@@ -282,13 +306,31 @@ const login = async (req, res) => {
   }
 };
 
-const logout = (req, res) => {
+const logout = async (req, res) => {
   const isProduction = process.env.NODE_ENV === "production";
   res.clearCookie("accessToken", {
     httpOnly: true,
     sameSite: isProduction ? "none" : "lax",
     secure: isProduction, // true in HTTPS production
   });
+
+  // ✅ Audit log for LOGOUT
+  try {
+    if (req.user) {
+      await AuditLog.create({
+        userId: req.user.id || req.user._id || null,
+        username: req.user.username || "",
+        firstname: req.user.firstname || "",
+        lastname: req.user.lastname || "",
+        action: "LOGOUT",
+        details: `User "${req.user.username || req.user.id}" logged out.`,
+        ipAddress: req.ip || req.connection?.remoteAddress || "",
+        userAgent: req.headers["user-agent"] || "",
+      });
+    }
+  } catch (auditErr) {
+    console.error("Audit log (LOGOUT) failed:", auditErr.message);
+  }
 
   return res.status(200).json({ message: "Logged out successfully" });
 };

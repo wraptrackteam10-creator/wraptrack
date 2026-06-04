@@ -28,8 +28,8 @@ function GuardFooter() {
         left: 0,
         width: "100%",
         display: "flex",
-        backgroundColor: "#123458", // ✅ Footer background
-        borderTop: "1px solid #D4C9BE", // ✅ Subtle divider
+        backgroundColor: "#123458",
+        borderTop: "1px solid #D4C9BE",
         zIndex: 2000,
       }}
     >

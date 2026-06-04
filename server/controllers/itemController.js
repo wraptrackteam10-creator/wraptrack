@@ -276,6 +276,12 @@ const updateItemStatus = async (req, res) => {
     const item = await Item.findById(id);
     if (!item) return res.status(404).json({ error: "Item not found" });
 
+    // SECURITY TRANSITION GUARD: Prevent standard users from marking status other than 'Pending Verification'
+    const role = resolveRoleFromReq(req) || "user";
+    if (role === "user" && status !== "Pending Verification") {
+      return res.status(403).json({ error: "Access denied: Users can only request verification, not approve claims." });
+    }
+
     if (status === "Deposited") { item.claimedAt = null; item.unclaimedAt = null; }
     else if (status === "Unclaimed") { item.claimedAt = null; item.unclaimedAt = new Date(); }
     else if (status === "Claimed") { if (!item.claimedAt) item.claimedAt = new Date(); item.unclaimedAt = null; item.penalty = 0; item.lastPenaltyAt = null; }
@@ -297,9 +303,8 @@ const updateItemStatus = async (req, res) => {
       });
     }
 
-    const viewerRole = resolveRoleFromReq(req) || "user";
     const fresh = await Item.findById(id).populate("userId", "firstname lastname type");
-    res.json(transformItemForRole(fresh, viewerRole));
+    res.json(transformItemForRole(fresh, role));
   } catch (error) {
     console.error("Update status error:", error);
     res.status(500).json({ error: "Failed to update status" });
@@ -357,6 +362,42 @@ const deleteItem = async (req, res) => {
   }
 };
 
+const getLogsByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Standard validation: Only check if it's a valid ID or if it starts with guest_
+    if (!mongoose.Types.ObjectId.isValid(userId) && !userId.startsWith("guest_")) {
+      return res.status(400).json({ error: "Invalid user ID format" });
+    }
+
+    const showArchived = req.query?.archived === "true";
+    const viewerRole = resolveRoleFromReq(req) || "user";
+
+    // Build query to find items owned by this user/guest
+    const query = userId.startsWith("guest_") ? { guestId: userId } : { userId: userId };
+
+    // Apply archiving filter matching the original getItems logic
+    if (showArchived) {
+      query[`archived.${viewerRole}.isArchived`] = true;
+    } else {
+      query.$or = [
+        { [`archived.${viewerRole}.isArchived`]: { $exists: false } },
+        { [`archived.${viewerRole}.isArchived`]: false },
+      ];
+    }
+
+    const items = await Item.find(query)
+      .populate("userId", "firstname lastname type")
+      .sort({ createdAt: -1 });
+
+    const transformed = items.map((it) => transformItemForRole(it, viewerRole));
+    res.json(transformed);
+  } catch (error) {
+    console.error("getLogsByUser error:", error);
+    res.status(500).json({ error: "Failed to fetch user history logs" });
+  }
+};
+
 module.exports = {
   uploadItem,
   getItems,
@@ -370,4 +411,5 @@ module.exports = {
   getItemSummary,
   updateItem,
   deleteItem,
-};
+  getLogsByUser,
+};
