@@ -444,19 +444,19 @@ function ItemManagement() {
   };
 
   /* ---------- TIME / HELPERS ---------- */
-  const timeAgo = (date) => {
-    const d = new Date(date);
-    const diff = Math.floor((Date.now() - d) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  };
+  // const timeAgo = (date) => {
+  //   const d = new Date(date);
+  //   const diff = Math.floor((Date.now() - d) / 1000);
+  //   if (diff < 60) return `${diff}s ago`;
+  //   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  //   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  //   return `${Math.floor(diff / 86400)}d ago`;
+  // };
 
-  const getLastUpdated = () =>
-    items.length
-      ? new Date(Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt || 0)).getTime())))
-      : new Date();
+  // const getLastUpdated = () =>
+  //   items.length
+  //     ? new Date(Math.max(...items.map((i) => new Date(advancedFilters.archived ? (i.archivedAt || i.updatedAt || i.createdAt) : (i.updatedAt || i.createdAt || 0)).getTime())))
+  //     : new Date();
 
   /* ---------- COLUMN SORT HANDLER (3 states) ---------- */
   const toggleSort = (field) => {
@@ -973,7 +973,7 @@ function ItemManagement() {
               <div className="d-block d-md-none p-2">
                 {paginatedItems.length === 0 && <p className="text-center p-2">No items found.</p>}
                 {paginatedItems.map((i, idx) => {
-                  const isEditing = editingItemId === i._id;
+                  // const isEditing = editingItemId === i._id;
                   const actualIdx = idx + 1 + (currentPage - 1) * itemsPerPage;
                   return (
                     <div key={i._id} className="card mb-2">

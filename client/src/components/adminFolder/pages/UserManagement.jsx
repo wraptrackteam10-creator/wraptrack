@@ -3,7 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import UserFilterPanel from "./UserFilterPanel";
 import { BsSearch, BsArrowCounterclockwise } from "react-icons/bs";
 import { CiFilter } from "react-icons/ci";
-import { FaSortUp, FaSortDown, FaUser, FaEnvelope, FaUserTag, FaShieldAlt, FaToggleOn, FaSave, FaTimes, FaArchive, FaFilter, FaEdit, FaUndo, FaEllipsisV, FaCalendarAlt } from "react-icons/fa";
+import { FaSortUp, FaSortDown, FaArchive, FaEdit, FaUndo, FaCalendarAlt } from "react-icons/fa";
 import { TiArrowUnsorted } from "react-icons/ti";
 import { fetchWithAuth } from "../../../utils/fetchWithAuth";
 
@@ -47,7 +47,7 @@ function UserManagement() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage, setUsersPerPage] = useState(10);
-  const [activeMenuId, setActiveMenuId] = useState(null);
+  // const [activeMenuId, setActiveMenuId] = useState(null);
 
   const API_BASE_URL =
     process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
@@ -851,7 +851,7 @@ function UserManagement() {
                 {paginatedUsers.length === 0 && <p className="text-center p-2">No users found.</p>}
                 {paginatedUsers.map((u, idx) => {
                   const creds = u.userCredentials || {};
-                  const isEditing = editingUserId === u._id;
+                  // const isEditing = editingUserId === u._id;
                   const actualIdx = idx + 1 + (currentPage - 1) * usersPerPage;
                   return (
                     <div key={u._id} className="card mb-2">

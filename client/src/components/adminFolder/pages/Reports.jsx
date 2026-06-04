@@ -489,11 +489,11 @@ function Reports() {
   };
 
   // Chart heights adjusted to screen size
-  const smallChartHeight = isMobile ? 180 : 250;
-  const mediumChartHeight = isMobile ? 220 : 300;
+  // const smallChartHeight = isMobile ? 180 : 250;
+  // const mediumChartHeight = isMobile ? 220 : 300;
   const lineChartHeight = isMobile ? 280 : 350;
   const weeklyTickInterval = isMobile ? 5 : 3;
-  const monthTickAngle = isMobile ? -45 : 0;
+  // const monthTickAngle = isMobile ? -45 : 0;
 
   return (
     <div className="container-fluid p-3 p-md-4" style={{ background: "#f8fafc", minHeight: "100vh" }}>

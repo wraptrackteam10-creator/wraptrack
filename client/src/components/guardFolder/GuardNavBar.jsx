@@ -1,5 +1,5 @@
 import logo from "../../images/wtlogofinal.png";
-import { FaBell, FaBars } from "react-icons/fa";
+import { FaBars } from "react-icons/fa";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { CiLogout } from "react-icons/ci";
