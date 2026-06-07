@@ -20,7 +20,6 @@ function UserManagement() {
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [loading, setLoading] = useState(true);
-  const [editingUserId, setEditingUserId] = useState(null);
   const [editedUser, setEditedUser] = useState({});
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
@@ -47,7 +46,6 @@ function UserManagement() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage, setUsersPerPage] = useState(10);
-  // const [activeMenuId, setActiveMenuId] = useState(null);
 
   const API_BASE_URL =
     process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
@@ -100,14 +98,12 @@ function UserManagement() {
 
   /* ---------------- ACTIONS ---------------- */
   const handleEditClick = (user) => {
-    setEditingUserId(user._id);
     setEditedUser(JSON.parse(JSON.stringify(user)));
     setShowEditModal(true);
   };
 
   const handleCloseEditModal = () => {
     setShowEditModal(false);
-    setEditingUserId(null);
     setEditedUser({});
   };
 
@@ -209,7 +205,6 @@ function UserManagement() {
         prev.map((u) => (u._id === updated._id ? updated : u))
       );
 
-      setEditingUserId(null);
       setEditedUser({});
       setShowEditModal(false);
       showToast("User updated successfully");
@@ -691,7 +686,8 @@ function UserManagement() {
                     <col style={{ width: "8%" }} />   {/* Type */}
                     <col style={{ width: "8%" }} />   {/* Status */}
                     <col style={{ width: "20%" }} />  {/* Actions */}
-                  </colgroup>                   <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#FFF" }}>
+                  </colgroup>
+                  <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#FFF" }}>
                     <tr style={{ color: "#D4C9BE", fontSize: "0.9rem" }}>
                       <th style={{ background: "#FFF", padding: "12px 8px", borderBottom: "2px solid #f0f2f5" }}>
                         {userAdvancedFilters.archived ? (
@@ -851,7 +847,6 @@ function UserManagement() {
                 {paginatedUsers.length === 0 && <p className="text-center p-2">No users found.</p>}
                 {paginatedUsers.map((u, idx) => {
                   const creds = u.userCredentials || {};
-                  // const isEditing = editingUserId === u._id;
                   const actualIdx = idx + 1 + (currentPage - 1) * usersPerPage;
                   return (
                     <div key={u._id} className="card mb-2">
@@ -1082,7 +1077,9 @@ function UserManagement() {
         >
           {toast.message}
         </div>
-      )}      {/* Edit User Modal */}
+      )}
+
+      {/* Edit User Modal */}
       {showEditModal && (
         <div className="modal fade show d-block" style={{ background: "rgba(0,0,0,.5)", zIndex: 1050 }}>
           <div className="modal-dialog modal-dialog-centered">

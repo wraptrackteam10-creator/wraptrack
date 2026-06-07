@@ -16,7 +16,7 @@ function GuardNavBar() {
   const notifRef = useRef(null);
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
-  const user = JSON.parse(localStorage.getItem("user"));
+  // const user = JSON.parse(localStorage.getItem("user"));
 
   /* ================= FETCH NOTIFICATIONS ================= */
   // useEffect(() => {
