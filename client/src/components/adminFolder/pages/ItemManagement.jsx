@@ -14,7 +14,6 @@ function ItemManagement() {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [sortField, setSortField] = useState("createdAt"); // default to sorting by createdAt
   const [sortOrder, setSortOrder] = useState("desc"); // default to descending (newest first)
-  const [editingItemId, setEditingItemId] = useState(null);
   const [editedItem, setEditedItem] = useState({});
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -277,7 +276,6 @@ function ItemManagement() {
   /* ---------- ACTIONS ---------- */
   const handleEditClick = (item) => {
     const { photo, ...clean } = item;
-    setEditingItemId(item._id);
     setEditedItem(clean);
     setShowEditModal(true);
   };
@@ -296,7 +294,6 @@ function ItemManagement() {
       const updated = await res.json();
 
       setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
-      setEditingItemId(null);
       setEditedItem({});
       setShowEditModal(false);
       showToast("Item updated successfully");
@@ -973,7 +970,6 @@ function ItemManagement() {
               <div className="d-block d-md-none p-2">
                 {paginatedItems.length === 0 && <p className="text-center p-2">No items found.</p>}
                 {paginatedItems.map((i, idx) => {
-                  // const isEditing = editingItemId === i._id;
                   const actualIdx = idx + 1 + (currentPage - 1) * itemsPerPage;
                   return (
                     <div key={i._id} className="card mb-2">
