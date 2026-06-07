@@ -851,7 +851,7 @@ function UserManagement() {
                 {paginatedUsers.length === 0 && <p className="text-center p-2">No users found.</p>}
                 {paginatedUsers.map((u, idx) => {
                   const creds = u.userCredentials || {};
-                  const isEditing = editingUserId === u._id;
+                  // const isEditing = editingUserId === u._id;
                   const actualIdx = idx + 1 + (currentPage - 1) * usersPerPage;
                   return (
                     <div key={u._id} className="card mb-2">

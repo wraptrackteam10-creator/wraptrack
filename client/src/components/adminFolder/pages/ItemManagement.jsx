@@ -973,7 +973,7 @@ function ItemManagement() {
               <div className="d-block d-md-none p-2">
                 {paginatedItems.length === 0 && <p className="text-center p-2">No items found.</p>}
                 {paginatedItems.map((i, idx) => {
-                  const isEditing = editingItemId === i._id;
+                  // const isEditing = editingItemId === i._id;
                   const actualIdx = idx + 1 + (currentPage - 1) * itemsPerPage;
                   return (
                     <div key={i._id} className="card mb-2">
