@@ -23,7 +23,7 @@ connectDB();
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:3000", "http://172.28.131.221:3000", "https://wraptrack.vercel.app"], // or your frontend URL
+  origin: ["http://localhost:3000", "http://192.168.1.27:3000", "https://wraptrack.vercel.app"], // or your frontend URL
   credentials: true,                                             // 🔥 REQUIRED for cookies
 })); 
 app.use(cookieParser());

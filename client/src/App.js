@@ -16,6 +16,7 @@ import UserHomePage from "./components/userFolder/pagesUser/UserHomePage";
 import UserDepositPage from "./components/userFolder/pagesUser/UserDepositPage";
 import UserClaimPage from "./components/userFolder/pagesUser/UserClaimPage";
 import UserHistoryLog from "./components/userFolder/pagesUser/UserHistoryLog";
+import UserArchivedPage from "./components/userFolder/pagesUser/UserArchivedPage";
 
 import DashboardGuard from "./components/guardFolder/DashboardGuard";
 import GuardHomePage from "./components/guardFolder/pagesGuard/GuardHomePage";
@@ -44,6 +45,37 @@ function App() {
     window.addEventListener("session-expired", handler);
 
     return () => window.removeEventListener("session-expired", handler);
+  }, []);
+
+  useEffect(() => {
+    let activityTimeout;
+    const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 minutes
+
+    const resetInactivityTimer = () => {
+      clearTimeout(activityTimeout);
+      activityTimeout = setTimeout(() => {
+        // Only trigger session expired if the user is currently logged in
+        if (localStorage.getItem("user")) {
+          window.dispatchEvent(new Event("session-expired"));
+        }
+      }, INACTIVITY_LIMIT);
+    };
+
+    // Track user interactions
+    const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
+    events.forEach((event) => {
+      window.addEventListener(event, resetInactivityTimer);
+    });
+
+    // Initialize timer
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(activityTimeout);
+      events.forEach((event) => {
+        window.removeEventListener(event, resetInactivityTimer);
+      });
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -120,6 +152,7 @@ function App() {
           <Route path="deposit" element={<UserDepositPage />} />
           <Route path="claim" element={<UserClaimPage />}/>
           <Route path="history" element={<UserHistoryLog />} />
+          <Route path="archived" element={<UserArchivedPage />} />
         </Route>
 
         <Route path="/guard/*" element={<DashboardGuard />}>

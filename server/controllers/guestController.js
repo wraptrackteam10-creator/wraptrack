@@ -1,7 +1,7 @@
 // controllers/guestController.js
 const User = require("../models/userModel");
 const AuditLog = require("../models/auditLogModel");
-const { generateAccessToken } = require("../utils/jwt");
+const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
 
 // Create and persist a guest user in the database
 const createGuest = async (req, res) => {
@@ -27,6 +27,7 @@ const createGuest = async (req, res) => {
 
     // ✅ GENERATE TOKEN WITH REAL DATABASE ID
     const accessToken = generateAccessToken(guestUser);
+    const refreshToken = generateRefreshToken(guestUser);
 
     const isProduction = process.env.NODE_ENV === "production";
     res.cookie("accessToken", accessToken, {
@@ -34,6 +35,13 @@ const createGuest = async (req, res) => {
       secure: isProduction, // true in production
       sameSite: isProduction ? "none" : "lax",
       maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 30 * 60 * 1000, // 30 minutes
     });
 
     // ✅ CREATE AUDIT LOG FOR GUEST LOGIN

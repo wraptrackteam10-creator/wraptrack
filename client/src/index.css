@@ -11,3 +11,9 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+@keyframes highlightPulse {
+  0%   { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.4); }
+  50%  { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.1); }
+  100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.4); }
+}

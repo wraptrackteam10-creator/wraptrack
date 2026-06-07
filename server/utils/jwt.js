@@ -21,8 +21,22 @@ const generateAccessToken = (user) => {
       rawRole: user.userCredentials.type, // optional (for UI)
     },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "15m" }
+    { expiresIn: process.env.JWT_EXPIRES_IN || "30m" }
   );
 };
 
-module.exports = { generateAccessToken };
+const generateRefreshToken = (user) => {
+  const role = normalizeRole(user.userCredentials.type);
+
+  return jwt.sign(
+    {
+      sub: user._id,
+      userId: user._id,
+      role,
+    },
+    process.env.JWT_REFRESH_SECRET || (process.env.JWT_SECRET + "_refresh"),
+    { expiresIn: "30m" }
+  );
+};
+
+module.exports = { generateAccessToken, generateRefreshToken };

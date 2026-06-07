@@ -7,6 +7,9 @@ const notificationSchema = new mongoose.Schema(
 
     guestId: { type: String, default: null },
 
+    // optional reference to the item this notification is about
+    itemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item", required: false, default: null },
+
     message: { type: String, required: true },
     read: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now },

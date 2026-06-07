@@ -17,11 +17,13 @@ bus.on("item:created", async (data) => {
     if (item.userId) {
       await Notification.create({
         userId: item.userId,
+        itemId: item._id,
         message: `📦 Item deposited: ${description}`,
       });
     } else if (item.guestId) {
       await Notification.create({
         guestId: item.guestId,
+        itemId: item._id,
         message: `📦 Item deposited: ${description}`,
       });
     }
@@ -50,11 +52,13 @@ bus.on("item:statusChanged", async (data) => {
       if (item.userId) {
         await Notification.create({
           userId: item.userId,
+          itemId: item._id,
           message,
         });
       } else if (item.guestId) {
         await Notification.create({
           guestId: item.guestId,
+          itemId: item._id,
           message,
         });
       }
@@ -74,11 +78,13 @@ bus.on("item:penaltyApplied", async (data) => {
     if (item.userId) {
       await Notification.create({
         userId: item.userId,
+        itemId: item._id,
         message: `💸 Penalty applied to "${item.description}". Total penalty: ${item.penalty}`,
       });
     } else if (item.guestId) {
       await Notification.create({
         guestId: item.guestId,
+        itemId: item._id,
         message: `💸 Penalty applied to "${item.description}". Total penalty: ${item.penalty}`,
       });
     }
@@ -97,11 +103,13 @@ bus.on("item:archived", async (data) => {
     if (role === "user" && item.userId) {
       await Notification.create({
         userId: item.userId,
+        itemId: item._id,
         message: `📁 Your item "${item.description}" has been archived after 7 days.`,
       });
     } else if (role === "user" && item.guestId) {
       await Notification.create({
         guestId: item.guestId,
+        itemId: item._id,
         message: `📁 Your item "${item.description}" has been archived after 7 days.`,
       });
     }
@@ -120,11 +128,13 @@ bus.on("item:unarchived", async (data) => {
     if (role === "user" && item.userId) {
       await Notification.create({
         userId: item.userId,
+        itemId: item._id,
         message: `📂 Your item "${item.description}" has been unarchived.`,
       });
     } else if (role === "user" && item.guestId) {
       await Notification.create({
         guestId: item.guestId,
+        itemId: item._id,
         message: `📂 Your item "${item.description}" has been unarchived.`,
       });
     }
@@ -143,11 +153,13 @@ bus.on("item:deleted", async (data) => {
     if (item.userId) {
       await Notification.create({
         userId: item.userId,
+        itemId: item._id,
         message: `🗑️ Your item "${item.description}" has been deleted.`,
       });
     } else if (item.guestId) {
       await Notification.create({
         guestId: item.guestId,
+        itemId: item._id,
         message: `🗑️ Your item "${item.description}" has been deleted.`,
       });
     }

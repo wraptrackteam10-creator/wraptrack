@@ -1,5 +1,5 @@
 import logo from "../../images/wtlogofinal.png";
-import { FaBell, FaBars, FaTrash } from "react-icons/fa";
+import { FaBell, FaBars, FaTrash, FaArchive } from "react-icons/fa";
 import { CiLogout } from "react-icons/ci";
 import { BsJournalText } from "react-icons/bs";
 import { MdOutlineInfo } from "react-icons/md";
@@ -243,8 +243,43 @@ function NavBarU() {
                       <li
                         key={note._id}
                         className="p-2 border-bottom small d-flex justify-content-between align-items-start"
+                        style={{
+                          cursor: note.itemId ? "pointer" : "default",
+                          transition: "background 0.15s",
+                          borderRadius: "6px",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (note.itemId) e.currentTarget.style.background = "#EEF4FB";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                        onClick={() => {
+                          if (note.itemId) {
+                            setShowNotifications(false);
+                            navigate(`/user/home?highlight=${note.itemId}`);
+                          }
+                        }}
                       >
-                        <div style={{ color: COLORS.text }}>
+                        <div style={{ color: COLORS.text, flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                            {note.itemId && (
+                              <span
+                                style={{
+                                  fontSize: "9px",
+                                  background: "#123458",
+                                  color: "#fff",
+                                  borderRadius: "4px",
+                                  padding: "1px 5px",
+                                  fontWeight: 600,
+                                  letterSpacing: "0.3px",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                VIEW ITEM
+                              </span>
+                            )}
+                          </div>
                           {note.message}
                           <br />
                           <small className="text-muted">
@@ -253,8 +288,11 @@ function NavBarU() {
                         </div>
                         <button
                           className="btn btn-sm border-0"
-                          style={{ color: COLORS.danger }}
-                          onClick={() => confirmDeleteSingle(note._id)}
+                          style={{ color: COLORS.danger, flexShrink: 0 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            confirmDeleteSingle(note._id);
+                          }}
                         >
                           ✖
                         </button>
@@ -312,6 +350,16 @@ function NavBarU() {
                     }}
                   >
                     <BsJournalText size={18} /> History Log
+                  </li>
+                  <li
+                    className="p-2 border-bottom small dropdown-item-clickable d-flex align-items-center gap-2"
+                    style={{ color: COLORS.text, cursor: "pointer" }}
+                    onClick={() => {
+                      navigate("/user/archived");
+                      setShowMenu(false);
+                    }}
+                  >
+                    <FaArchive size={15} /> Archived Items
                   </li>
                   <li
                     className="p-2 border-bottom small dropdown-item-clickable d-flex align-items-center gap-2"

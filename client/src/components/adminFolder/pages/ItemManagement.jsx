@@ -12,8 +12,8 @@ function ItemManagement() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const [sortField, setSortField] = useState(null); // null = neutral
-  const [sortOrder, setSortOrder] = useState(null); // "asc" | "desc"
+  const [sortField, setSortField] = useState("createdAt"); // default to sorting by createdAt
+  const [sortOrder, setSortOrder] = useState("desc"); // default to descending (newest first)
   const [editingItemId, setEditingItemId] = useState(null);
   const [editedItem, setEditedItem] = useState({});
   const [loading, setLoading] = useState(true);

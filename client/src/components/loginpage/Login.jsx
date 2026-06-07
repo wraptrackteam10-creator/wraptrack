@@ -11,6 +11,7 @@ function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   const [toastMessage, setToastMessage] = useState("");
@@ -24,6 +25,11 @@ function Login() {
   const guestFirstRef = useRef(null);
 
   useEffect(() => {
+    const remembered = localStorage.getItem("rememberedUsername");
+    if (remembered) {
+      setUsername(remembered);
+      setRememberMe(true);
+    }
     usernameRef.current?.focus();
   }, []);
 
@@ -88,6 +94,12 @@ function Login() {
         showToastMessage("Login succeeded but user data missing.");
         setIsSubmitting(false);
         return;
+      }
+
+      if (rememberMe) {
+        localStorage.setItem("rememberedUsername", username.trim());
+      } else {
+        localStorage.removeItem("rememberedUsername");
       }
 
       const stored = {
@@ -236,46 +248,79 @@ function Login() {
             />
           </div>
 
-          <div className="mb-3 text-start" style={{ position: "relative" }}>
+          <div className="mb-3 text-start">
             <label htmlFor="password" className="form-label" style={{ color: "#030303" }}>
               Password
             </label>
-            <input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              className="form-control"
-              placeholder="Enter password"
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{ borderColor: "#D4C9BE" }}
-              autoComplete="current-password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((s) => !s)}
-              aria-pressed={showPassword}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+            <div className="position-relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                className="form-control"
+                placeholder="Enter password"
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{ borderColor: "#D4C9BE" }}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-pressed={showPassword}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{
+                  position: "absolute",
+                  right: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#D4C9BE",
+                  fontSize: "1.1rem",
+                  padding: 0,
+                }}
+              >
+                <i className={`bi ${showPassword ? "bi-eye" : "bi-eye-slash"}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <div className="form-check d-flex align-items-center gap-1">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="rememberMe"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={{ borderColor: "#D4C9BE", cursor: "pointer", marginTop: 0 }}
+              />
+              <label
+                className="form-check-label small"
+                htmlFor="rememberMe"
+                style={{ color: "#030303", cursor: "pointer", userSelect: "none" }}
+              >
+                Remember me
+              </label>
+            </div>
+
+            <NavLink
+              to="/forgot-password"
               style={{
-                position: "absolute",
-                right: "12px",
-                top: "72%",
-                transform: "translateY(-50%)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "#D4C9BE",
-                fontSize: "1.1rem",
-                padding: 0,
+                color: "#123458",
+                textDecoration: "none",
+                fontSize: "0.9rem",
               }}
             >
-              <i className={`bi ${showPassword ? "bi-eye" : "bi-eye-slash"}`} />
-            </button>
+              Forgot Password?
+            </NavLink>
           </div>
 
           <button
             type="submit"
-            className="btn w-100 py-2 fw-bold mb-2"
+            className="btn w-100 py-2 fw-bold mb-3"
             style={{
               backgroundColor: "#123458",
               color: "#F1EFEC",
@@ -295,30 +340,19 @@ function Login() {
           </button>
         </form>
 
-        <div className="d-flex justify-content-between align-items-center mt-2">
-          <NavLink
-            to="/forgot-password"
-            style={{
-              color: "#123458",
-              textDecoration: "none",
-              fontSize: "0.9rem",
-            }}
-          >
-            Forgot Password?
-          </NavLink>
-
+        <div className="text-center">
           <button
             type="button"
             onClick={openGuestModal}
-            className="btn btn-link"
-            style={{ color: "#123458", textDecoration: "none" }}
+            className="btn btn-link p-0 mb-3"
+            style={{ color: "#123458", textDecoration: "none", fontSize: "0.95rem" }}
             title="Continue as guest"
           >
             Continue as Guest
           </button>
         </div>
 
-        <div className="text-center mt-3">
+        <div className="text-center">
           <small style={{ color: "#030303" }}>
             Don’t have an account?{" "}
             <NavLink
@@ -326,6 +360,7 @@ function Login() {
               style={{
                 color: "#123458",
                 textDecoration: "none",
+                fontWeight: "600",
               }}
             >
               Register

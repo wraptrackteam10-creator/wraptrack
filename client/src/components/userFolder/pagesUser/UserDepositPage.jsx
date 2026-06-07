@@ -252,7 +252,7 @@ function UserDepositPage() {
       setCurrentStage(0);
       setDescription("");
 
-      const res = await fetch("https://4hpsxle4t3fkwr-5000.proxy.runpod.net/predict", {
+      const res = await fetch("http://172.28.131.221:5000/predict", {
         method: "POST",
         body: formData,
       });
@@ -347,7 +347,7 @@ function UserDepositPage() {
       setIsDetecting(true);
       setCurrentStage(0);
 
-      const res = await fetch("https://4hpsxle4t3fkwr-5000.proxy.runpod.net/predict", {
+      const res = await fetch("http://172.28.131.221:5000/predict", {
         method: "POST",
         body: formData,
       });

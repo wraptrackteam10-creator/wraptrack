@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useSearchParams, useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "../usercss/imageStyle.css";
@@ -60,6 +60,7 @@ function UserHomePage() {
   const [expandedItemId, setExpandedItemId] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [hoveredTooltip, setHoveredTooltip] = useState(null);
+  const [highlightedItemId, setHighlightedItemId] = useState(null);
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -68,6 +69,9 @@ function UserHomePage() {
   const user = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user")) : null;
   const cardsRef = useRef({});
   const tooltipRef = useRef(null);
+  const rowRefs = useRef({});
+
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const showToast = (message, type = "success", duration = 3000) => {
     setToast({ show: true, message, type });
@@ -122,6 +126,30 @@ function UserHomePage() {
     if (user?.id) fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, API_BASE_URL]);
+
+  // Highlight item from notification click
+  useEffect(() => {
+    const highlightId = searchParams.get("highlight");
+    if (!highlightId || loading) return;
+
+    setHighlightedItemId(highlightId);
+
+    // Scroll to the item row after render
+    const timeout = setTimeout(() => {
+      const el = rowRefs.current[highlightId];
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      // Clear highlight after 3.5s
+      setTimeout(() => {
+        setHighlightedItemId(null);
+        setSearchParams({}, { replace: true });
+      }, 3500);
+    }, 200);
+
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loading]);
 
   const getPenaltyInfo = (status, createdAt, penalty) => {
     // ✅ ADD THIS: Handle Settled status
@@ -251,11 +279,11 @@ function UserHomePage() {
         <li>Penalty increases <strong>₱1 per day</strong></li>
         <li>Can be resolved as <strong>sanctioned</strong></li>
       </ul>
-      <NavLink 
-        to="/info/penalties" 
-        style={{ 
-          color: "#90EE90", 
-          textDecoration: "underline", 
+      <NavLink
+        to="/info/penalties"
+        style={{
+          color: "#90EE90",
+          textDecoration: "underline",
           fontSize: "12px",
           fontWeight: 500
         }}
@@ -438,7 +466,7 @@ function UserHomePage() {
                     No items found yet
                   </h5>
                   <p style={{ color: COLORS.lightText, marginBottom: "20px", fontSize: "14px" }}>
-                    Start by depositing your first item to get started with WraPTrack.
+                    You haven't deposited any items yet. Scan to deposit an item to get started.
                   </p>
                   <NavLink to="/user/deposit" className="text-decoration-none">
                     <button
@@ -452,7 +480,7 @@ function UserHomePage() {
                         cursor: "pointer",
                       }}
                     >
-                      <i className="bi bi-camera me-2" /> Scan Your First Item
+                      <i className="bi bi-camera me-2" /> Scan Item
                     </button>
                   </NavLink>
                 </div>
@@ -524,7 +552,7 @@ function UserHomePage() {
                               >
                                 <i className="bi bi-info-circle" style={{ fontSize: "14px", lineHeight: 1 }} />
                               </button>
-                              
+
                               {hoveredTooltip === "header-penalty" && (
                                 <PenaltyTooltip tooltipId="header-penalty" />
                               )}
@@ -540,13 +568,21 @@ function UserHomePage() {
                       {items.map((item, idx) => (
                         <tr
                           key={item._id}
+                          ref={(el) => { rowRefs.current[item._id] = el; }}
                           style={{
                             borderBottom: `1px solid ${COLORS.border}`,
                             color: COLORS.text,
-                            transition: "background-color 0.15s ease",
+                            transition: "background-color 0.15s ease, box-shadow 0.3s ease, outline 0.3s ease",
+                            ...(highlightedItemId === item._id ? {
+                              backgroundColor: "#FFFBEA",
+                              outline: "2px solid #F59E0B",
+                              outlineOffset: "-2px",
+                              boxShadow: "0 0 0 4px rgba(245, 158, 11, 0.2)",
+                              animation: "highlightPulse 1s ease-in-out 3",
+                            } : {}),
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F9FAFB")}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                          onMouseEnter={(e) => { if (highlightedItemId !== item._id) e.currentTarget.style.backgroundColor = "#F9FAFB"; }}
+                          onMouseLeave={(e) => { if (highlightedItemId !== item._id) e.currentTarget.style.backgroundColor = "transparent"; }}
                         >
                           <td style={{ padding: "14px 16px", fontSize: "14px", fontWeight: 600, color: COLORS.lightText }}>
                             {idx + 1}
@@ -742,13 +778,23 @@ function UserHomePage() {
                   return (
                     <div
                       key={item._id}
-                      ref={(el) => (cardsRef.current[item._id] = el)}
+                      ref={(el) => {
+                        cardsRef.current[item._id] = el;
+                        rowRefs.current[item._id] = el;
+                      }}
                       style={{
                         background: COLORS.surface,
-                        border: `1px solid ${COLORS.border}`,
+                        border: highlightedItemId === item._id
+                          ? "2px solid #F59E0B"
+                          : `1px solid ${COLORS.border}`,
                         borderRadius: "10px",
                         overflow: "hidden",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                        boxShadow: highlightedItemId === item._id
+                          ? "0 0 0 4px rgba(245, 158, 11, 0.2)"
+                          : "0 2px 8px rgba(0,0,0,0.06)",
+                        backgroundColor: highlightedItemId === item._id ? "#FFFBEA" : COLORS.surface,
+                        transition: "box-shadow 0.3s ease, border 0.3s ease, background-color 0.3s ease",
+                        animation: highlightedItemId === item._id ? "highlightPulse 1s ease-in-out 3" : "none",
                       }}
                     >
                       {/* Card Header */}
@@ -938,11 +984,11 @@ function UserHomePage() {
                                     <li>Penalty increases <strong>₱1 per day</strong></li>
                                     <li>Can be resolved as <strong>sanctioned</strong></li>
                                   </ul>
-                                  <NavLink 
-                                    to="/info/penalties" 
-                                    style={{ 
-                                      color: "#90EE90", 
-                                      textDecoration: "underline", 
+                                  <NavLink
+                                    to="/info/penalties"
+                                    style={{
+                                      color: "#90EE90",
+                                      textDecoration: "underline",
                                       fontSize: "12px",
                                       fontWeight: 500,
                                       display: "inline-block",

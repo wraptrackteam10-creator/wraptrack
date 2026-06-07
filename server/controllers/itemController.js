@@ -149,7 +149,9 @@ const getItems = async (req, res) => {
       };
     }
 
-    const items = await Item.find(query).populate("userId", "firstname lastname type");
+    const items = await Item.find(query)
+      .populate("userId", "firstname lastname type")
+      .sort({ createdAt: -1 });
     // transform each item to include archivedAt / archivedBy for this viewer role
     const transformed = items.map((it) => transformItemForRole(it, viewerRole));
     res.json(transformed);

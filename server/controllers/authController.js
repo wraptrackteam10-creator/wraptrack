@@ -5,7 +5,7 @@ const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { generateAccessToken } = require("../utils/jwt");
+const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
 
 // Safe fetch wrapper (works on Render + Node <18)
 const fetch = (...args) =>
@@ -263,6 +263,7 @@ const login = async (req, res) => {
       return res.status(401).json({ errorMessage: "Invalid username or password" });
 
     const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
 
     const isProduction = process.env.NODE_ENV === "production";
     res.cookie("accessToken", accessToken, {
@@ -270,6 +271,13 @@ const login = async (req, res) => {
       secure: isProduction, // Set to true in production with HTTPS
       sameSite: isProduction ? "none" : "lax",
       maxAge: 15 * 60 * 1000, // 15 min
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 30 * 60 * 1000, // 30 min
     });
 
     // ✅ Audit log for LOGIN
@@ -313,6 +321,11 @@ const logout = async (req, res) => {
     sameSite: isProduction ? "none" : "lax",
     secure: isProduction, // true in HTTPS production
   });
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
+  });
 
   // ✅ Audit log for LOGOUT
   try {
@@ -335,4 +348,65 @@ const logout = async (req, res) => {
   return res.status(200).json({ message: "Logged out successfully" });
 };
 
-module.exports = { signup, verifyOtp, resendOtp, login, logout, cleanupExpiredTempSignups };
+const refresh = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+    if (!refreshToken) {
+      return res.status(401).json({ errorMessage: "No refresh token provided" });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || (process.env.JWT_SECRET + "_refresh"));
+    } catch (err) {
+      console.error("Refresh token verification failed:", err.message);
+      return res.status(401).json({ errorMessage: "Invalid or expired refresh token" });
+    }
+
+    const userId = payload.sub || payload.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(401).json({ errorMessage: "User not found" });
+    }
+
+    if (user.userCredentials.status !== "Active") {
+      return res.status(401).json({ errorMessage: "User is not active" });
+    }
+
+    const accessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    const isProduction = process.env.NODE_ENV === "production";
+    
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 15 * 60 * 1000, // 15 min
+    });
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 30 * 60 * 1000, // 30 min
+    });
+
+    return res.status(200).json({
+      message: "Token refreshed successfully",
+      user: {
+        id: user._id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        username: user.userCredentials.username,
+        email: user.userCredentials.email,
+        role: user.userCredentials.type,
+      },
+    });
+  } catch (error) {
+    console.error("Refresh error:", error.message);
+    return res.status(500).json({ errorMessage: "Server error during refresh" });
+  }
+};
+
+module.exports = { signup, verifyOtp, resendOtp, login, logout, refresh, cleanupExpiredTempSignups };
