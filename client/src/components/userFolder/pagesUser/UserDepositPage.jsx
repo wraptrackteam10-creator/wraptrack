@@ -94,16 +94,12 @@ function UserDepositPage() {
   useEffect(() => {
     if (!isDetecting) return;
 
-    let currentStageIndex = 0;
-    setCurrentStage(0);
-
     const animationLoop = async () => {
-      while (isDetecting && currentStageIndex < DETECTION_STAGES.length) {
-        setCurrentStage(currentStageIndex);
+      for (let stageIndex = 0; stageIndex < DETECTION_STAGES.length && isDetecting; stageIndex++) {
+        setCurrentStage(stageIndex);
         await new Promise((resolve) => 
-          setTimeout(resolve, DETECTION_STAGES[currentStageIndex].duration)
+          setTimeout(resolve, DETECTION_STAGES[stageIndex].duration)
         );
-        currentStageIndex++;
       }
     };
 

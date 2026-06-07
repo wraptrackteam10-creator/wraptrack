@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   FaBoxOpen,
   FaCheckCircle,
@@ -80,14 +80,15 @@ function GuardHomePage() {
   };
 
   // Helper function to check if date matches filter period
-  const matchesPeriod = (dateString) => {
+  // ✅ MEMOIZED with useCallback to prevent recreation on every render
+  const matchesPeriod = useCallback((dateString) => {
     if (!dateString) return false;
     if (filterPeriod === "daily") return isToday(dateString);
     if (filterPeriod === "weekly") return isThisWeek(dateString);
     if (filterPeriod === "monthly") return isThisMonth(dateString);
     if (filterPeriod === "yearly") return isThisYear(dateString);
     return false;
-  };
+  }, [filterPeriod]);
 
   // Calculate summary stats based on filter period
   const { totalDeposited, totalClaimed, totalUnclaimed } = useMemo(() => {
@@ -102,7 +103,7 @@ function GuardHomePage() {
     });
 
     return { totalDeposited: deposited, totalClaimed: claimed, totalUnclaimed: unclaimed };
-  }, [items, filterPeriod]);
+  }, [items, matchesPeriod]);
 
   // Filter recent activity
   const recentActivity = useMemo(() => {
@@ -150,7 +151,7 @@ function GuardHomePage() {
     });
 
     return filtered.sort((a, b) => b.timestamp - a.timestamp);
-  }, [items, filterPeriod]);
+  }, [items, matchesPeriod]);
 
   // Summary cards data - ONLY 3 CARDS
   const summaryCards = [
