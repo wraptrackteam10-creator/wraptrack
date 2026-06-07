@@ -6,10 +6,10 @@ import { CiLogout } from "react-icons/ci";
 import { fetchWithAuth } from "../../utils/fetchWithAuth";
 
 function GuardNavBar() {
-  const [showNotifications, setShowNotifications] = useState(false);
+  // const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // const [notifications, setNotifications] = useState([]);
+  // const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
   const menuRef = useRef(null);
@@ -19,21 +19,21 @@ function GuardNavBar() {
   const user = JSON.parse(localStorage.getItem("user"));
 
   /* ================= FETCH NOTIFICATIONS ================= */
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      if (!user) return;
-      try {
-        const res = await fetchWithAuth(`${API_BASE_URL}/api/notifications/${user.id}`);
-        const data = await res.json();
-        if (res.ok) setNotifications(data);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchNotifications();
-  }, [user, API_BASE_URL]);
+  // useEffect(() => {
+  //   const fetchNotifications = async () => {
+  //     if (!user) return;
+  //     try {
+  //       const res = await fetchWithAuth(`${API_BASE_URL}/api/notifications/${user.id}`);
+  //       const data = await res.json();
+  //       if (res.ok) setNotifications(data);
+  //     } catch (error) {
+  //       console.error(error);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+  //   fetchNotifications();
+  // }, [user, API_BASE_URL]);
 
   /* ================= CLICK OUTSIDE ================= */
   useEffect(() => {
@@ -45,7 +45,7 @@ function GuardNavBar() {
         !notifRef.current.contains(event.target)
       ) {
         setShowMenu(false);
-        setShowNotifications(false);
+        // setShowNotifications(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -148,7 +148,7 @@ function GuardNavBar() {
               size={20}
               onClick={() => {
                 setShowMenu(!showMenu);
-                setShowNotifications(false);
+                // setShowNotifications(false);
               }}
               style={{ color: "#F1EFEC", cursor: "pointer" }}
             />

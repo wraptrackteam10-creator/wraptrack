@@ -1,9 +1,9 @@
 // full file — added pagination state, pagination logic, and pagination UI at bottom
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { LuArchiveX } from "react-icons/lu";
+// import { LuArchiveX } from "react-icons/lu";
 import { IoCheckmarkCircleOutline } from "react-icons/io5";
-import { FaRegCalendarAlt, FaFilePdf, FaEye, FaEdit, FaArchive, FaUndo, FaSortUp, FaSortDown } from "react-icons/fa";
+import { FaRegCalendarAlt, FaFilePdf, FaArchive, FaUndo, FaSortDown } from "react-icons/fa";
 import { IoIosArrowDown } from "react-icons/io";
 import { CiFilter } from "react-icons/ci";
 import { MdOutlineKeyboardArrowRight } from "react-icons/md";

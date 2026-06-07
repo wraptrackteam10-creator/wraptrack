@@ -270,7 +270,7 @@ const login = async (req, res) => {
       httpOnly: true,
       secure: isProduction, // Set to true in production with HTTPS
       sameSite: isProduction ? "none" : "lax",
-      maxAge: 15 * 60 * 1000, // 15 min
+      maxAge: 30 * 60 * 1000, // 15 min
     });
 
     res.cookie("refreshToken", refreshToken, {
